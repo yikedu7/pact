@@ -1,6 +1,7 @@
 import { createPublicClient, createWalletClient, http, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { ANVIL_KEYS, type ChainConfig } from "../chain.js";
+import { GuildTxError, assertSendable, explainSendFailure } from "./errors.js";
 import type { Role, TxRequest, TxSender } from "./types.js";
 
 function keyForRole(role: Role, chainId: number): Hex {
@@ -17,6 +18,7 @@ function keyForRole(role: Role, chainId: number): Hex {
   throw new Error(`Missing ${role} private key (set ${role.toUpperCase()}_PRIVATE_KEY)`);
 }
 
+/** LocalEoa (path B). Anvil defaults on chain 31337; otherwise `BUYER_` / `EXPERT_` / `VERIFIER_PRIVATE_KEY`. */
 export function createLocalSender(role: Role, chain: ChainConfig): TxSender {
   const account = privateKeyToAccount(keyForRole(role, chain.chainId));
   const publicClient = createPublicClient({ transport: http(chain.rpcUrl) });
@@ -29,18 +31,24 @@ export function createLocalSender(role: Role, chain: ChainConfig): TxSender {
     role,
     address: account.address,
     send: async (tx) => {
-      const hash = await walletClient.sendTransaction({
-        chain: null,
-        account,
-        to: tx.to,
-        data: tx.data,
-        value: tx.value ?? 0n,
-      });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== "success") {
-        throw new Error(`Transaction reverted: ${hash}`);
+      try {
+        await assertSendable(publicClient, { role, from: account.address, tx, chain });
+        const hash = await walletClient.sendTransaction({
+          chain: null,
+          account,
+          to: tx.to,
+          data: tx.data,
+          value: tx.value ?? 0n,
+        });
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        if (receipt.status !== "success") {
+          throw new Error(`Transaction reverted: ${hash}`);
+        }
+        return hash;
+      } catch (err) {
+        if (err instanceof GuildTxError) throw err;
+        throw explainSendFailure(role, account.address, chain, err);
       }
-      return hash;
     },
   };
 }

@@ -29,12 +29,14 @@ export async function buyerPreparePayment(
   paymentToken: Address,
   escrow: Address,
   mockPaymentToken: boolean,
+  amount: bigint = PRICE_UNITS,
 ): Promise<string[]> {
   const txs: string[] = [];
   if (mockPaymentToken) {
-    txs.push(await buyer.send(encodeMint(paymentToken, buyer.address, 100_000_000n)));
+    const mintAmount = amount > 100_000_000n ? amount : 100_000_000n;
+    txs.push(await buyer.send(encodeMint(paymentToken, buyer.address, mintAmount)));
   }
-  txs.push(await buyer.send(encodeApprove(paymentToken, escrow, PRICE_UNITS)));
+  txs.push(await buyer.send(encodeApprove(paymentToken, escrow, amount)));
   return txs;
 }
 

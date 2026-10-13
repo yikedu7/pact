@@ -88,3 +88,43 @@ export function resultUri(passed: boolean): string {
 export function approvalModeToContract(mode: ApprovalModeLabel): 0 | 1 {
   return mode === "approve_for_me" ? 1 : 0;
 }
+
+const USDC_SCALE = 1_000_000n;
+
+/** Parse a USDC decimal string (6 dp) into base units. `"5"` → `5000000`. */
+export function usdcAmountToUnits(amount: string): bigint {
+  if (!/^\d+(\.\d{1,6})?$/.test(amount)) {
+    throw new Error(
+      `USDC amount must be a positive decimal with at most 6 places, got ${JSON.stringify(amount)}.`,
+    );
+  }
+  const [whole, frac = ""] = amount.split(".");
+  const units = BigInt(whole) * USDC_SCALE + BigInt(frac.padEnd(6, "0"));
+  if (units === 0n) {
+    throw new Error("USDC amount must be greater than 0.");
+  }
+  return units;
+}
+
+/** `2026-10-20T14:51:26Z` → unix seconds. Does not rewrite the spec string. */
+export function deadlineUnix(deadline: string): bigint {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(deadline)) {
+    throw new Error(
+      `Task deadline must be an ISO8601 UTC timestamp like 2026-10-20T14:51:26Z, got ${JSON.stringify(deadline)}.`,
+    );
+  }
+  const ms = Date.parse(deadline);
+  if (Number.isNaN(ms)) {
+    throw new Error(`Task deadline is not a valid time: ${deadline}.`);
+  }
+  return BigInt(Math.floor(ms / 1000));
+}
+
+export function formatUsdc(units: bigint): string {
+  const neg = units < 0n;
+  const v = neg ? -units : units;
+  const whole = v / USDC_SCALE;
+  const frac = (v % USDC_SCALE).toString().padStart(6, "0").replace(/0+$/, "");
+  const text = frac.length > 0 ? `${whole}.${frac}` : whole.toString();
+  return neg ? `-${text}` : text;
+}

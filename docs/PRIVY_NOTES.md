@@ -29,6 +29,7 @@ POST https://api.privy.io/v1/wallets/{wallet_id}/rpc
 Authorization: Basic base64(app_id:app_secret)
 privy-app-id: {app_id}
 Content-Type: application/json
+User-Agent: PrivyNodeJS/1.0
 
 {
   "method": "eth_sendTransaction",
@@ -91,9 +92,39 @@ Do **not** expose one shared wallet that impersonates all three — judges will 
 
 ## Creating the three wallets
 
-Privy dashboard / API: create three **server wallets** (Ethereum) in the demo app. Record `id` + `address` for each. Fund Buyer (and maybe Verifier if gas-only roles need native) with faucet native gas; fund Buyer with MockUSDC after deploy.
+This section is **path A only** (the official Guild demo bot, vendor `PrivyShared`). End users of
+that bot do not configure Privy. Guild operators hold `PRIVY_APP_ID` and `PRIVY_APP_SECRET` on
+the bot host, outside git.
 
-If Privy cannot create wallets on Monad testnet yet: create wallets as EVM addresses (same ECDSA), fund on the chain that works, point `caip2` + RPC at Base Sepolia fallback. Addresses stay stable across EVM chains.
+The public skill ([`templates/`](../templates/)) is **path B** (`LocalEoa`). Do not put the Guild
+app secret in that template. Operators generate three local EOAs and use a testnet faucet.
+`UserAaSession` is a follow-up. ZeroDev / a paymaster is an optional later UX upgrade, not the
+self-host default. Bring-your-own Privy is also a follow-up.
+
+Official-bot operators (not public-skill installers) create any missing role wallet on first run:
+
+```bash
+cd agents && npm run wallets:bootstrap
+```
+
+That is `POST https://api.privy.io/v1/wallets` with `{"chain_type":"ethereum"}` and header
+`User-Agent: PrivyNodeJS/1.0` (Privy often returns 403 without it). Each role sends a stable
+`privy-idempotency-key` (`guild-escrow-server-wallet:buyer|expert|verifier`). Ids and addresses
+are cached in gitignored `wallets/guild-roles.json` and printed as:
+
+- `PRIVY_WALLET_BUYER_ID` / `PRIVY_WALLET_BUYER_ADDRESS`
+- `PRIVY_WALLET_EXPERT_ID` / `PRIVY_WALLET_EXPERT_ADDRESS`
+- `PRIVY_WALLET_VERIFIER_ID` / `PRIVY_WALLET_VERIFIER_ADDRESS`
+
+Save those as bot secrets and reuse them. A later run with the ids unset and the cache gone
+creates another set. Never commit the app secret, wallet ids, or `wallets/`.
+
+Fund Buyer (and Expert / Verifier, who also send transactions) with faucet native gas; fund
+Buyer with MockUSDC after deploy when the token is not mintable by the buyer.
+
+If Privy cannot broadcast on Monad testnet: the same EVM addresses work on Base Sepolia.
+Point `PRIVY_CAIP2` and `RPC_URL` at `eip155:84532`. The agents default Monad CAIP-2 is
+`eip155:10143`.
 
 ## What to reuse vs rewrite
 

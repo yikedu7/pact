@@ -1,17 +1,18 @@
 import type { ChainConfig } from "../chain.js";
+import { ensurePrivyRoleWallets } from "./bootstrap.js";
 import { createLocalSender } from "./local.js";
-import { createPrivySender, privyConfigFromEnv } from "./privy.js";
+import { createPrivySender } from "./privy.js";
 import type { Role, TxSender } from "./types.js";
 
 export type { Role, TxRequest, TxSender } from "./types.js";
 
-export function createRoleSenders(chain: ChainConfig): Record<Role, TxSender> {
-  const privy = privyConfigFromEnv();
+export async function createRoleSenders(chain: ChainConfig): Promise<Record<Role, TxSender>> {
+  const privy = await ensurePrivyRoleWallets();
   if (privy) {
     return {
-      buyer: createPrivySender("buyer", privy, chain),
-      expert: createPrivySender("expert", privy, chain),
-      verifier: createPrivySender("verifier", privy, chain),
+      buyer: createPrivySender("buyer", privy.config, chain),
+      expert: createPrivySender("expert", privy.config, chain),
+      verifier: createPrivySender("verifier", privy.config, chain),
     };
   }
   return {
@@ -21,6 +22,9 @@ export function createRoleSenders(chain: ChainConfig): Record<Role, TxSender> {
   };
 }
 
-export function signingBackend(): "privy" | "local" {
-  return privyConfigFromEnv() ? "privy" : "local";
+/** `"privy"` is PrivyShared (path A). `"local"` is LocalEoa (path B). See `adapter.ts`. */
+export function signingBackend(env: Record<string, string | undefined> = process.env): "privy" | "local" {
+  const appId = env.PRIVY_APP_ID?.trim();
+  const appSecret = env.PRIVY_APP_SECRET?.trim();
+  return appId && appSecret ? "privy" : "local";
 }

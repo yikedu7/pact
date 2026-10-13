@@ -9,7 +9,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "demo": "tsx src/cli.ts",
-    "demo:local": "tsx src/cli.ts --local-anvil"
+    "demo:local": "tsx src/cli.ts --local-anvil",
+    "wallets:bootstrap": "tsx src/cli.ts --bootstrap-wallets",
+    "escrow:after-accept": "tsx src/cli.ts --after-accept"
   },
   "bin": {
     "agent-escrow-demo": "./src/cli.ts"

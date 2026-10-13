@@ -96,7 +96,7 @@ export async function runLogoDemo(opts: {
   approvalMode: ApprovalModeLabel;
 }): Promise<DemoResult> {
   const { chain, deployment, scenario, approvalMode } = opts;
-  const senders = createRoleSenders(chain);
+  const senders = await createRoleSenders(chain);
   const backend = signingBackend();
   const txHashes: string[] = [];
   const publicClient = createPublicClient({ transport: http(chain.rpcUrl) });

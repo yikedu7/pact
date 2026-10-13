@@ -6,9 +6,9 @@ import {
   type PublicClient,
 } from "viem";
 import type { ChainConfig } from "../chain.js";
+import { PRIVY_API, WALLET_ADDRESS_ENV, WALLET_ID_ENV, privyAuthHeaders } from "./bootstrap.js";
+import { assertSendable, explainSendFailure } from "./errors.js";
 import type { Role, TxRequest, TxSender } from "./types.js";
-
-const PRIVY_API = "https://api.privy.io";
 
 export interface PrivyConfig {
   appId: string;
@@ -22,21 +22,10 @@ export function privyConfigFromEnv(): PrivyConfig | null {
   if (!appId || !appSecret) return null;
 
   const walletId = (role: Role) => {
-    const key =
-      role === "buyer"
-        ? "PRIVY_WALLET_BUYER_ID"
-        : role === "expert"
-          ? "PRIVY_WALLET_EXPERT_ID"
-          : "PRIVY_WALLET_VERIFIER_ID";
+    const key = WALLET_ID_ENV[role];
     const id = process.env[key];
     if (!id) throw new Error(`Missing ${key} for Privy signing`);
-    const addrKey =
-      role === "buyer"
-        ? "PRIVY_WALLET_BUYER_ADDRESS"
-        : role === "expert"
-          ? "PRIVY_WALLET_EXPERT_ADDRESS"
-          : "PRIVY_WALLET_VERIFIER_ADDRESS";
-    const address = process.env[addrKey] as Address | undefined;
+    const address = process.env[WALLET_ADDRESS_ENV[role]] as Address | undefined;
     return { walletId: id, address };
   };
 
@@ -51,7 +40,7 @@ export function privyConfigFromEnv(): PrivyConfig | null {
   };
 }
 
-async function privySendTransaction(
+export async function privySendTransaction(
   cfg: PrivyConfig,
   role: Role,
   tx: TxRequest,
@@ -66,13 +55,8 @@ async function privySendTransaction(
     );
   }
 
+  const gas = await assertSendable(publicClient, { role, from, tx, chain });
   const nonce = await publicClient.getTransactionCount({ address: from, blockTag: "pending" });
-  const gas = await publicClient.estimateGas({
-    account: from,
-    to: tx.to,
-    data: tx.data,
-    value: tx.value ?? 0n,
-  });
 
   const body = {
     method: "eth_sendTransaction",
@@ -89,20 +73,19 @@ async function privySendTransaction(
     },
   };
 
-  const auth = Buffer.from(`${cfg.appId}:${cfg.appSecret}`).toString("base64");
   const res = await fetch(`${PRIVY_API}/v1/wallets/${walletId}/rpc`, {
     method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "privy-app-id": cfg.appId,
-      "Content-Type": "application/json",
-    },
+    headers: privyAuthHeaders(cfg.appId, cfg.appSecret),
     body: JSON.stringify(body),
   });
 
   const json = (await res.json()) as { data?: { hash?: Hex }; hash?: Hex; error?: { message?: string } };
   if (!res.ok) {
-    throw new Error(`Privy RPC failed (${res.status}): ${JSON.stringify(json)}`);
+    const hint =
+      res.status === 403
+        ? " Privy often returns 403 without User-Agent PrivyNodeJS/1.0, or when PRIVY_APP_ID / PRIVY_APP_SECRET do not match the shared Guild app."
+        : "";
+    throw new Error(`Privy RPC failed (${res.status}): ${JSON.stringify(json)}.${hint}`);
   }
   const hash = json.data?.hash ?? json.hash;
   if (!hash) throw new Error(`Privy response missing tx hash: ${JSON.stringify(json)}`);
@@ -114,6 +97,7 @@ async function privySendTransaction(
   return hash;
 }
 
+/** PrivyShared (path A, official Guild demo bot). End users do not set these secrets. */
 export function createPrivySender(
   role: Role,
   cfg: PrivyConfig,
@@ -135,9 +119,13 @@ export function createPrivySender(
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.includes("nonce too low")) {
-          return await privySendTransaction(cfg, role, tx, chain, publicClient);
+          try {
+            return await privySendTransaction(cfg, role, tx, chain, publicClient);
+          } catch (retryErr) {
+            throw explainSendFailure(role, address, chain, retryErr);
+          }
         }
-        throw e;
+        throw explainSendFailure(role, address, chain, e);
       }
     },
   };
