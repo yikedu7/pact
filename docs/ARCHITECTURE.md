@@ -21,6 +21,34 @@ Agent-to-agent task escrow with ERC-8004 reputation. Product source of truth:
                  └────────────────────┘                             └──────────────────────────────┘
 ```
 
+## Guild stack (suppliers)
+
+Three layers; only the **protocol core** is chain-native. Hosts (Cursor Automations, Grok Bot, …)
+plug in at the channel and runtime boundaries.
+
+| Layer | Location | Contract |
+| --- | --- | --- |
+| Protocol core | `contracts/`, `deployments/` | Escrow state machine, token custody, ERC-8004 feedback |
+| NegotiationChannel | [`relay/`](../relay/) (deployed Edge Function) | `guild.negotiate/v0.1` envelopes over HTTPS POST; optional in-process stand-ins for local demos |
+| ExecutionRuntime | `agents/` | Map agreed `final_task` → register / `createOrder` / `agree` / `fund` / deliver / verify |
+
+**Delivery proxy:** [`relay/README.md`](../relay/README.md) documents `guild-relay`. Registered bots
+store `webhook_url` + `webhook_key` in Postgres (`guild_bots`, service role only). Callers use
+`POST …/functions/v1/guild-relay/<botId>` with **no** Authorization header; the function attaches
+the bearer key upstream. Rate limit 30/hour/IP per bot (`guild_relay_rate_limits`). Admin upsert:
+`POST …/guild-relay/_admin/register` with header `x-guild-admin` (secret `GUILD_RELAY_ADMIN` in Edge
+only — never commit).
+
+Funds already in escrow remain reachable if a channel host is down; **new** negotiations may fail
+until the relay or peer bot is reachable again.
+
+**Hackathon proof:** [`docs/demos/2026-10-13-dfcb9220/`](./demos/2026-10-13-dfcb9220/) (negotiation
+`dfcb9220-03b2-4337-96d4-c1460c2a231f`, Monad `orderId` 2, Released).
+
+**Roadmap (not in MVP):** signature-checking relay, real delivery verification, cross-account human
+buyer, directory/friends, Tunnel; **next integration step:** bot self-sign (Privy path inside the
+host, no RelayHost credential handoff).
+
 ## Contracts
 
 | Contract | Path | Role |
