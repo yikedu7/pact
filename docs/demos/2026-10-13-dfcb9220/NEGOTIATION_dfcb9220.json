@@ -1,0 +1,206 @@
+{
+  "negotiation_id": "dfcb9220-03b2-4337-96d4-c1460c2a231f",
+  "status": "released",
+  "channel": "webhook",
+  "escrow": "local_anvil",
+  "offer_escrow_mode": "monad_10143",
+  "specHash": "0x1b43cd73e2242762c4e27c12cb5ee58f32f733bba1b2406a158be2f2abaeff1d",
+  "jcs_path": "/workspace/guild-docs/negotiations/dfcb9220-03b2-4337-96d4-c1460c2a231f.jcs.json",
+  "final_task": {
+    "task_type": "design.logo",
+    "title": "Guild logo",
+    "price": {
+      "token": "USDC",
+      "amount": "5"
+    },
+    "deadline": "2026-10-20T14:51:26Z",
+    "deliverables": [
+      {
+        "kind": "image/png",
+        "min_size": "1024x1024",
+        "count": 3
+      }
+    ],
+    "acceptance_criteria": [
+      {
+        "id": "c1",
+        "type": "auto",
+        "check": "file_format == png && size >= 1024"
+      },
+      {
+        "id": "c2",
+        "type": "llm",
+        "check": "包含文字 'Guild'，风格简洁"
+      }
+    ],
+    "approval_mode": "approve_for_me",
+    "revisions": 1
+  },
+  "latest": {
+    "protocol": "guild.negotiate/v0.1",
+    "type": "accept",
+    "negotiation_id": "dfcb9220-03b2-4337-96d4-c1460c2a231f",
+    "round": 0,
+    "from_role": "expert",
+    "to_role": "buyer",
+    "reply_to": "0f7cf24e-50ca-48c1-8185-62d9b094ecd5",
+    "message_id": "3abc3471-854b-4c35-9ee2-a766395865e9",
+    "created_at": "2026-10-13T14:51:58Z",
+    "callback_url": "",
+    "channel": "webhook",
+    "body": {
+      "final_task": {
+        "task_type": "design.logo",
+        "title": "Guild logo",
+        "price": {
+          "token": "USDC",
+          "amount": "5"
+        },
+        "deadline": "2026-10-20T14:51:26Z",
+        "deliverables": [
+          {
+            "kind": "image/png",
+            "min_size": "1024x1024",
+            "count": 3
+          }
+        ],
+        "acceptance_criteria": [
+          {
+            "id": "c1",
+            "type": "auto",
+            "check": "file_format == png && size >= 1024"
+          },
+          {
+            "id": "c2",
+            "type": "llm",
+            "check": "包含文字 'Guild'，风格简洁"
+          }
+        ],
+        "approval_mode": "approve_for_me",
+        "revisions": 1
+      },
+      "note": "Accepted design.logo at 5 USDC"
+    }
+  },
+  "history": [
+    {
+      "protocol": "guild.negotiate/v0.1",
+      "type": "offer",
+      "negotiation_id": "dfcb9220-03b2-4337-96d4-c1460c2a231f",
+      "round": 0,
+      "from_role": "buyer",
+      "to_role": "expert",
+      "message_id": "0f7cf24e-50ca-48c1-8185-62d9b094ecd5",
+      "created_at": "2026-10-13T14:51:26Z",
+      "callback_url": "https://hpdffdsglxedgtoxykdt.supabase.co/functions/v1/guild-relay/buyer-demo",
+      "channel": "webhook",
+      "body": {
+        "task": {
+          "task_type": "design.logo",
+          "title": "Guild logo",
+          "price": {
+            "token": "USDC",
+            "amount": "5"
+          },
+          "deadline": "2026-10-20T14:51:26Z",
+          "deliverables": [
+            {
+              "kind": "image/png",
+              "min_size": "1024x1024",
+              "count": 3
+            }
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "c1",
+              "type": "auto",
+              "check": "file_format == png && size >= 1024"
+            },
+            {
+              "id": "c2",
+              "type": "llm",
+              "check": "包含文字 'Guild'，风格简洁"
+            }
+          ],
+          "approval_mode": "approve_for_me",
+          "revisions": 1
+        },
+        "escrow_mode": "monad_10143"
+      }
+    },
+    {
+      "protocol": "guild.negotiate/v0.1",
+      "type": "accept",
+      "negotiation_id": "dfcb9220-03b2-4337-96d4-c1460c2a231f",
+      "round": 0,
+      "from_role": "expert",
+      "to_role": "buyer",
+      "reply_to": "0f7cf24e-50ca-48c1-8185-62d9b094ecd5",
+      "message_id": "3abc3471-854b-4c35-9ee2-a766395865e9",
+      "created_at": "2026-10-13T14:51:58Z",
+      "callback_url": "",
+      "channel": "webhook",
+      "body": {
+        "final_task": {
+          "task_type": "design.logo",
+          "title": "Guild logo",
+          "price": {
+            "token": "USDC",
+            "amount": "5"
+          },
+          "deadline": "2026-10-20T14:51:26Z",
+          "deliverables": [
+            {
+              "kind": "image/png",
+              "min_size": "1024x1024",
+              "count": 3
+            }
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "c1",
+              "type": "auto",
+              "check": "file_format == png && size >= 1024"
+            },
+            {
+              "id": "c2",
+              "type": "llm",
+              "check": "包含文字 'Guild'，风格简洁"
+            }
+          ],
+          "approval_mode": "approve_for_me",
+          "revisions": 1
+        },
+        "note": "Accepted design.logo at 5 USDC"
+      }
+    }
+  ],
+  "received_at": "2026-10-13T14:52:47.859Z",
+  "escrow_result": {
+    "TaskEscrow": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+    "orderId": 1,
+    "status": "Released (6)",
+    "txs": [
+      "0x254bb2cb9d902e4a31e851f1e595d76ae4a2dd245dad82d6e147a719590688ab",
+      "0x2dd950600a8c41f247181442cd734275f66e75b6112dcea9c1a3f936e3c6687a",
+      "0x7ab8e5c5461f614444fc54f0ea755cceafe75cc5de8f488ac5ec4d93c2440ab1",
+      "0xb1b156d4137973438fb92aabee5404eb36ad649e271ec87ec9d9946d9f655dd3",
+      "0xdab01834e71c452c4a31f070a60da56e8b7d4bfb3df76cf4cd29d6404c67384c",
+      "0x4cdac0de7c739231f65cb3a1b521688b06ee5c555b811af41ea0f41106965973",
+      "0xf0e8ecefbb0c3fa8d8d5aba18a29ae925d56ffefb071eb9d7f5f497c8711e030",
+      "0x23aa5be613e8f9d385738eec64cbf6ed929eebeaf7d39207e3bb62ec04d2b9fc",
+      "0x5432c2b78af08ab8c10ab565b1d56fc35fb7b64946ca4a6e578f5ee91fa0b351",
+      "0x5885dfb79c185b495bdd600f7578ed39a208a15cc391b9454fe874e5de399a34"
+    ],
+    "feedback": {
+      "skill": "design.logo",
+      "count": 1,
+      "passRate%": 100
+    },
+    "expertAgentId": 1,
+    "buyerAgentId": 2,
+    "verifierAgentId": 3,
+    "completed_at": "2026-10-13T14:54:04.878Z",
+    "log": "/workspace/guild-docs/demo-local-dfcb9220.log"
+  }
+}

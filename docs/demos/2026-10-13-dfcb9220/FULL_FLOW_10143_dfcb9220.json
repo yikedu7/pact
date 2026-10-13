@@ -1,0 +1,84 @@
+{
+  "chainId": 10143,
+  "rpc": "https://testnet-rpc.monad.xyz/",
+  "negotiation_id": "dfcb9220-03b2-4337-96d4-c1460c2a231f",
+  "deployments": {
+    "chainId": 10143,
+    "defaultVerifier": "0x7E70cCAB3c6862005988E1B2e31D76C35EFaC8A8",
+    "deployer": "0xcB6D16A55Ee8A019037C58AA882da5785d17aB37",
+    "identityRegistry": "0xD4679fBE4c08074098286BAFd7c2fD5BD99Bc18B",
+    "mockPaymentToken": true,
+    "paymentToken": "0x86e4e74838a65389F1df96Af4141242119e3318D",
+    "reputationRegistry": "0x7C63A4848f18E9E9f50B984b29BcF8d99fdC215A",
+    "startBlock": 70668464,
+    "taskEscrow": "0x56c58c9cac5Bf071e7808BcB4535647149860D25"
+  },
+  "orderId": 2,
+  "status": "Released",
+  "statusCode": 6,
+  "agentIds": {
+    "expert": 1,
+    "buyer": 2,
+    "verifier": 3
+  },
+  "specHash": "0xbb07aedad5722462d6d098bc605fe2868329acb6ecefb2caf703e8eedbc23a06",
+  "el_specHash": "0x1b43cd73e2242762c4e27c12cb5ee58f32f733bba1b2406a158be2f2abaeff1d",
+  "specHash_note": "Demo used buildLogoSpec with dynamic deadline (block.timestamp+86400); differs from negotiation final_task JCS deadline 2026-10-20T14:51:26Z. On-chain order.specHash is the demo-built hash. EL hash verified = keccak256(utf8(negotiation .jcs.json)).",
+  "approvalMode": "ApproveForMe",
+  "amount": 5000000,
+  "hashes": {
+    "mint": "0xb303ef7879aa7e39dccfc6d97f98e0b8e6cdddea4bd8d975f241688b022a5560",
+    "approve": "0xf8ef6f7ad5f92e6d1fad9a2f1d8b4290bc8c85400d669584433f6fd04e2996fc",
+    "createOrder": "0xd9528b0a255aea574f140a7c8244f78485ab7230f30a676f6b0f970159a172c4",
+    "agree": "0xe538fc4237b273286d98bba65a1f94ffed552f1aeb507fcce501a1466e465709",
+    "fund": "0x7c3c76b68d77d651a2feee5e9ef2bf54f581a964b6a02607966d6afcbdd38b69",
+    "submitDelivery": "0x131777b25e8833dd3c3829b389e2b0e34fd20914b052134efa0c24275aa24e74",
+    "release": "0x94a7c1e5486314f94c751d6e6db9dd95685779184e5ee929197562fedae99f10"
+  },
+  "log": [
+    {
+      "step": "mint",
+      "role": "buyer",
+      "hash": "0xb303ef7879aa7e39dccfc6d97f98e0b8e6cdddea4bd8d975f241688b022a5560",
+      "status": 1
+    },
+    {
+      "step": "approve",
+      "role": "buyer",
+      "hash": "0xf8ef6f7ad5f92e6d1fad9a2f1d8b4290bc8c85400d669584433f6fd04e2996fc",
+      "status": 1
+    },
+    {
+      "step": "createOrder",
+      "role": "buyer",
+      "hash": "0xd9528b0a255aea574f140a7c8244f78485ab7230f30a676f6b0f970159a172c4",
+      "status": 1
+    },
+    {
+      "step": "agree",
+      "role": "expert",
+      "hash": "0xe538fc4237b273286d98bba65a1f94ffed552f1aeb507fcce501a1466e465709",
+      "status": 1
+    },
+    {
+      "step": "fund",
+      "role": "buyer",
+      "hash": "0x7c3c76b68d77d651a2feee5e9ef2bf54f581a964b6a02607966d6afcbdd38b69",
+      "status": 1
+    },
+    {
+      "step": "submitDelivery",
+      "role": "expert",
+      "hash": "0x131777b25e8833dd3c3829b389e2b0e34fd20914b052134efa0c24275aa24e74",
+      "status": 1
+    },
+    {
+      "step": "release",
+      "role": "verifier",
+      "hash": "0x94a7c1e5486314f94c751d6e6db9dd95685779184e5ee929197562fedae99f10",
+      "status": 1
+    }
+  ],
+  "signing": "privy",
+  "reused_agent_ids": true
+}

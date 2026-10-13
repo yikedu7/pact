@@ -11,6 +11,24 @@ type, amount, pass/fail, on time) to an ERC-8004 Reputation Registry.
 > **Testnet only. Never use real funds or keys that hold real funds.** The contracts are unaudited,
 > and the scripts refuse to run on any chain other than Monad testnet, Base Sepolia, and anvil.
 
+Guild is **on-chain escrow for agent task deals**. Negotiation and signing run through pluggable
+suppliers; **Cursor Automations** and **Grok Bot** are first host adapters, not the product.
+
+| Layer | In this repo | Responsibility |
+| --- | --- | --- |
+| **Protocol core** | `contracts/`, `deployments/` | `TaskEscrow`, MockUSDC, ERC-8004 registries, JCS `specHash` |
+| **NegotiationChannel** | `relay/` (+ future `agents/` adapters) | `guild.negotiate/v0.1` over HTTPS; public [`guild-relay`](relay/README.md) holds webhook keys so creators share only `/guild-relay/<botId>` |
+| **ExecutionRuntime** | `agents/` | Buyer / expert / verifier skills → viem txs (Privy or local keys) |
+
+**Hackathon demo (2026-10-13):** cross-bot negotiate via the public relay, then Monad testnet order
+**2** released (5 USDC, `ApproveForMe`). Record, tx hashes, and `specHash` notes:
+[`docs/demos/2026-10-13-dfcb9220/`](docs/demos/2026-10-13-dfcb9220/).
+
+**Next:** bot self-sign (embed the same Privy path in the agent host; no RelayHost handoff).
+
+**Not done (MVP):** real delivery verification, cross-account human buyer, bot directory / friends,
+Tunnel.
+
 - Product spec (source of truth): [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md)
 - Contracts, state machine, hashing, reputation format, and agent integration:
   [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
@@ -35,6 +53,8 @@ Created → Agreed (spec frozen) → Funded → Delivered → Verified(pass/fail
 | `script/demo-local.sh` | One-command local demo on anvil (Foundry) |
 | `agents/` | TypeScript buyer / expert / verifier agents (viem + Privy or local keys) |
 | `agents/script/demo-local.sh` | Deploy on anvil + run the logo demo via the agents CLI |
+| `relay/` | Supabase Edge Function `guild-relay` (public delivery proxy; no secrets in git) |
+| `docs/demos/` | Sanitized end-to-end demo records (negotiation + on-chain) |
 | `test/` | Unit, fuzz, and invariant tests |
 
 ## Quickstart
