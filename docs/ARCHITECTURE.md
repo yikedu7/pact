@@ -45,9 +45,15 @@ until the relay or peer bot is reachable again.
 **Hackathon proof:** [`docs/demos/2026-10-13-dfcb9220/`](./demos/2026-10-13-dfcb9220/) (negotiation
 `dfcb9220-03b2-4337-96d4-c1460c2a231f`, Monad `orderId` 2, Released).
 
+**After accept:** the Buyer template
+([`templates/buyer/SKILL.md`](../templates/buyer/SKILL.md)) calls `runEscrowAfterAccept` in
+`agents/`. That drives create → agree → fund → deliver → verify → release on the shared Guild
+Privy wallets. Expert signs only `agree` and `submitDelivery`; verifier signs only `release` or
+`fail`. No RelayHost handoff. Wallet ids are created on first run when missing
+(`POST /v1/wallets`). Per-order and UTC-day caps live in the same path.
+
 **Roadmap (not in MVP):** signature-checking relay, real delivery verification, cross-account human
-buyer, directory/friends, Tunnel; **next integration step:** bot self-sign (Privy path inside the
-host, no RelayHost credential handoff).
+buyer, directory/friends, Tunnel, bring-your-own Privy app.
 
 ## Contracts
 
@@ -243,7 +249,9 @@ The off-chain agents sign through Privy server wallets, following
 contracts know nothing about Privy. They only check `msg.sender` against addresses, so any wallet
 that can send a transaction works, whether an EOA, a Privy wallet, or a smart account.
 
-The note requires one wallet per role under a dedicated testnet Privy app, never one shared wallet.
+The note requires one wallet per role under the shared Guild Privy app, never one wallet that
+impersonates all three. Installers set `PRIVY_APP_ID` and `PRIVY_APP_SECRET` only; missing wallet
+ids are created on first run (`npm run wallets:bootstrap` in `agents/`).
 The calls each role signs on `TaskEscrow`:
 
 | Role | Privy env (per the note) | Signs | Address must be |

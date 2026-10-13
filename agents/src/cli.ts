@@ -1,13 +1,17 @@
 #!/usr/bin/env node
 import { config as loadEnv } from "dotenv";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPublicClient, http } from "viem";
 import { chainConfigFromEnv, resolveRpcUrl } from "./chain.js";
+import { parseCliArgs } from "./cli-args.js";
 import { loadDeployment, repoRootFromAgents } from "./deployments.js";
 import { runLogoDemo } from "./demo/logo-demo.js";
+import { runEscrowAfterAccept } from "./escrow/after-accept.js";
 import { OrderStatus, parseScenario, statusLabel } from "./state.js";
 import type { ApprovalModeLabel } from "./spec.js";
+import { ensurePrivyRoleWallets, formatWalletSecretLines } from "./wallet/bootstrap.js";
 
 const agentsDir = dirname(fileURLToPath(import.meta.url));
 loadEnv({ path: join(repoRootFromAgents(), ".env") });
@@ -18,9 +22,40 @@ function parseApprovalMode(raw: string): ApprovalModeLabel {
   throw new Error(`APPROVAL_MODE must be user or approve_for_me, got ${raw}`);
 }
 
+function readStdin(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    process.stdin.on("data", (chunk: Buffer) => chunks.push(chunk));
+    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", reject);
+  });
+}
+
+async function readAcceptPayload(path: string): Promise<unknown> {
+  const text = path === "-" ? await readStdin() : readFileSync(path, "utf8");
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error(`Accept payload is not JSON (${path === "-" ? "stdin" : path}).`);
+  }
+}
+
 async function main(): Promise<void> {
-  const args = new Set(process.argv.slice(2));
-  const localAnvil = args.has("--local-anvil");
+  const args = parseCliArgs(process.argv.slice(2));
+
+  if (args.bootstrapWallets) {
+    const wallets = await ensurePrivyRoleWallets();
+    if (!wallets) {
+      throw new Error(
+        "Set PRIVY_APP_ID and PRIVY_APP_SECRET to the shared Guild Privy app. " +
+          "Creators do not apply for their own Privy app on the MVP path. Wallet ids are created on first run.",
+      );
+    }
+    console.log(formatWalletSecretLines(wallets));
+    return;
+  }
+
+  const localAnvil = args.localAnvil;
 
   const rpcUrl = resolveRpcUrl();
   const publicClient = createPublicClient({ transport: http(rpcUrl) });
@@ -40,6 +75,39 @@ async function main(): Promise<void> {
 
   console.log(`chain ${chain.name} (${chain.chainId}) via ${rpcUrl}`);
   console.log(`TaskEscrow ${deployment.taskEscrow}`);
+
+  if (args.afterAccept) {
+    console.log(`after-accept ${args.afterAccept}`);
+    const message = await readAcceptPayload(args.afterAccept);
+    const result = await runEscrowAfterAccept({
+      message,
+      chain,
+      deployment,
+      scenario,
+    });
+    console.log("\nEscrow steps:");
+    for (const step of result.steps) {
+      console.log(`  ${step.role} ${step.step} ${step.tx}`);
+    }
+    console.log("\nResult:");
+    console.log(`  orderId: ${result.orderId}`);
+    console.log(`  status: ${statusLabel(result.status)} (${result.status})`);
+    console.log(`  specHash: ${result.specHash}`);
+    console.log(`  amount: ${result.amount} (USDC base units)`);
+    console.log(`  approval_mode: ${result.approvalMode} (from the accepted task, not APPROVAL_MODE)`);
+    console.log(`  signing: ${result.signingBackend}`);
+    console.log(`  expertAgentId: ${result.expertAgentId}`);
+    console.log(`  buyerAgentId: ${result.buyerAgentId}`);
+    console.log(`  verifierAgentId: ${result.verifierAgentId}`);
+    const expected =
+      scenario === "timeout" ? OrderStatus.Funded : scenario === "fail" ? OrderStatus.Refunded : OrderStatus.Released;
+    if (result.status !== expected) {
+      console.warn(`  warning: expected terminal status ${statusLabel(expected)}, got ${statusLabel(result.status)}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+
   console.log(`scenario=${scenario} approval_mode=${approvalMode}`);
 
   const result = await runLogoDemo({

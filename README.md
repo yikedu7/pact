@@ -24,7 +24,9 @@ suppliers; **Cursor Automations** and **Grok Bot** are first host adapters, not 
 **2** released (5 USDC, `ApproveForMe`). Record, tx hashes, and `specHash` notes:
 [`docs/demos/2026-10-13-dfcb9220/`](docs/demos/2026-10-13-dfcb9220/).
 
-**Next:** bot self-sign (embed the same Privy path in the agent host; no RelayHost handoff).
+**Self-run after accept:** install the Buyer / Expert / Verifier templates and the Buyer
+drives escrow on the shared Guild Privy wallets. No separate RelayHost handoff.
+See [Bot template](#bot-template-shared-privy-then-self-run).
 
 **Not done (MVP):** real delivery verification, cross-account human buyer, bot directory / friends,
 Tunnel.
@@ -52,6 +54,7 @@ Created → Agreed (spec frozen) → Funded → Delivered → Verified(pass/fail
 | `script/Demo.s.sol` | Runs the spec's "Guild logo, 5 USDC, 24h" order step by step |
 | `script/demo-local.sh` | One-command local demo on anvil (Foundry) |
 | `agents/` | TypeScript buyer / expert / verifier agents (viem + Privy or local keys) |
+| `templates/` | Buyer / Expert / Verifier bot skills: configure Guild Privy once, then self-run escrow after accept |
 | `agents/script/demo-local.sh` | Deploy on anvil + run the logo demo via the agents CLI |
 | `relay/` | Supabase Edge Function `guild-relay` (public delivery proxy; no secrets in git) |
 | `docs/demos/` | Sanitized end-to-end demo records (negotiation + on-chain) |
@@ -190,15 +193,56 @@ agents, `createOrder` → `agree` → `fund` → `submitDelivery` → `release`/
 `approve` when `approval_mode=user`. Criteria JSON is hashed with RFC 8785 (JCS), matching
 `TaskEscrow.hashSpec` and the pinned vector in `test/Demo.t.sol`.
 
-**Signing:** with `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, and the three `PRIVY_WALLET_*_ID` values set,
+**Signing:** with `PRIVY_APP_ID` and `PRIVY_APP_SECRET` set to the shared Guild Privy app,
 transactions go through Privy `eth_sendTransaction` (see [`docs/PRIVY_NOTES.md`](docs/PRIVY_NOTES.md)).
-You must also set `PRIVY_WALLET_*_ADDRESS` for gas estimation and `PRIVY_CAIP2` once Privy's CAIP-2
-for Monad testnet is confirmed. Without Privy env vars, the CLI uses local private keys (anvil
-defaults on chain `31337`).
+If `PRIVY_WALLET_*_ID` is unset, the first run creates three Ethereum server wallets
+(buyer, expert, verifier) via `POST /v1/wallets` and writes ids under gitignored `wallets/`.
+Set `PRIVY_CAIP2` (Monad testnet default `eip155:10143`) and the wallet addresses once they
+exist. Without Privy env vars, the CLI uses local private keys (anvil defaults on chain `31337`).
 
 ```bash
 cd agents && npm ci && npm test && npm run typecheck
 ```
+
+## Bot template: shared Privy, then self-run
+
+Creators install [`templates/`](templates/) and use **one shared Guild Privy app**. They do not
+apply for their own Privy app on the MVP path. Bring-your-own Privy, browser wallets, and
+gas sponsorship are follow-ups, not this path.
+
+1. Set bot secrets `PRIVY_APP_ID` and `PRIVY_APP_SECRET` (the Guild demo app), plus
+   `RPC_URL` or `MONAD_TESTNET_RPC`, `CHAIN_ID=10143`, and `PRIVY_CAIP2=eip155:10143`.
+2. First configure creates the three role wallets when ids are missing:
+
+```bash
+cd agents && npm run wallets:bootstrap
+```
+
+Copy the printed `PRIVY_WALLET_*_ID` and `PRIVY_WALLET_*_ADDRESS` lines into the bot secret
+store. Do not commit them. Fund the wallets with testnet gas (and the buyer with the payment
+token, unless it is MockUSDC).
+
+3. After the expert sends `guild.negotiate/v0.1` `accept`, the **Buyer** template runs escrow
+   itself. Expert only signs `agree` and `submitDelivery`. Verifier only signs `release` or
+   `fail`. There is no handoff to a separate escrow chat bot.
+
+```bash
+cd agents && npm run escrow:after-accept -- ../accept.json
+```
+
+`accept.json` is either the accept envelope or a negotiation record whose `latest` message is
+that accept (the shape in `docs/demos/2026-10-13-dfcb9220/`). Approval mode comes from the
+frozen task. `SCENARIO=pass|fail|timeout` is only a demo knob.
+
+Caps (USDC base units, 6 decimals) are enforced before any transaction:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `GUILD_TX_AMOUNT_CAP` | `100000000` (100 USDC) | Maximum one order can escrow |
+| `GUILD_DAILY_AMOUNT_CAP` | `500000000` (500 USDC) | UTC-day cumulative funds |
+
+A breach, an empty gas balance, or a failed simulation throws a short error and does not
+broadcast. The 5 USDC logo demo fits the defaults.
 
 ### Local anvil (one command)
 
