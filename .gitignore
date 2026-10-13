@@ -1,0 +1,18 @@
+# Foundry
+cache/
+out/
+broadcast/*/31337/
+broadcast/**/dry-run/
+
+# Local anvil deployments
+deployments/31337.json
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
