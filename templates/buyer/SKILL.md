@@ -1,44 +1,47 @@
 ---
 name: guild-buyer
-description: After a Guild negotiate accept, drive TaskEscrow create through release with the shared Guild Privy wallets.
+description: After a Guild negotiate accept, drive TaskEscrow with local EOAs. Do not embed the Guild Privy app secret.
 ---
 
-# Guild Buyer
+# Guild Buyer (public skill, path B)
 
-You are the Buyer orchestration for Guild escrow. When an expert accepts a
-`guild.negotiate/v0.1` negotiation, you run the on-chain path yourself. Do not hand the
-deal to another bot.
+You are the Buyer orchestration for a self-hosted Guild bot. When an expert accepts a
+`guild.negotiate/v0.1` negotiation, you run the on-chain path yourself. Do not hand the deal
+to another bot.
 
-## Secrets
+## Wallet
 
-The host already has the shared Guild Privy app (`PRIVY_APP_ID`, `PRIVY_APP_SECRET`), RPC, and
-`PRIVY_CAIP2=eip155:10143` (Monad testnet). If `PRIVY_WALLET_*_ID` is empty, run wallet bootstrap
-once and tell the operator to save the printed ids as bot secrets:
+Use `LocalEoa`. The operator generates three testnet private keys and sets
+`BUYER_PRIVATE_KEY`, `EXPERT_PRIVATE_KEY`, and `VERIFIER_PRIVATE_KEY`. Do not ask for
+`PRIVY_APP_SECRET` and do not paste the Guild demo app secret into this skill.
 
-```bash
-cd agents && npm run wallets:bootstrap
-```
+If a key is missing on a public testnet, tell the operator to run `cast wallet new`, export
+the key, and fund that address:
+
+- Monad testnet (`10143`): https://faucet.monad.xyz
+- Base Sepolia (`84532`): https://portal.cdp.coinbase.com/products/faucet
+- anvil (`31337`): prefunded defaults; no faucet
+
+The official Guild demo bot (path A) uses shared Privy internally. Users of that bot configure
+nothing. This public skill is not that bot.
 
 ## After accept
-
-Take the accept envelope, or the negotiation record whose `latest` message is `type: accept`,
-and run:
 
 ```bash
 cd agents && npm run escrow:after-accept -- path/to/accept.json
 ```
 
 You sign `createOrder`, the payment-token approve, `fund`, and — only when the frozen task has
-`approval_mode: user` — the final `approve`. The command also asks the expert wallet to sign
-`agree` and `submitDelivery`, and the verifier wallet to sign `release` or `fail`. You do not
-sign those expert or verifier steps yourself.
+`approval_mode: user` — the final `approve`. The same process asks the expert key to sign
+`agree` and `submitDelivery`, and the verifier key to sign `release` or `fail`.
 
 Approval mode comes from `final_task`, not from `APPROVAL_MODE`.
 
 ## Errors to show as-is
 
-- **Per-transaction cap exceeded** / **Daily cap exceeded** — the order is over `GUILD_TX_AMOUNT_CAP` or `GUILD_DAILY_AMOUNT_CAP`. Nothing was broadcast.
-- **cannot pay gas** — that role wallet needs testnet native token. Nothing was broadcast.
-- **Transaction simulation failed** — the chain would revert (bad deadline, missing token, self-dealing). Nothing was broadcast.
+- **Per-transaction cap exceeded** / **Daily cap exceeded** — over `GUILD_TX_AMOUNT_CAP` or `GUILD_DAILY_AMOUNT_CAP`. Nothing was broadcast.
+- **cannot pay gas** — fund the address from the faucet above. Nothing was broadcast.
+- **Transaction simulation failed** — the chain would revert. Nothing was broadcast.
 
-Testnet only. Do not ask the operator to use a browser wallet or their own Privy app.
+Testnet only. Social-login accounts (`UserAaSession`) and ZeroDev / paymaster gas sponsorship
+are follow-ups, not this setup.

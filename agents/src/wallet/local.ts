@@ -18,6 +18,7 @@ function keyForRole(role: Role, chainId: number): Hex {
   throw new Error(`Missing ${role} private key (set ${role.toUpperCase()}_PRIVATE_KEY)`);
 }
 
+/** LocalEoa (path B). Anvil defaults on chain 31337; otherwise `BUYER_` / `EXPERT_` / `VERIFIER_PRIVATE_KEY`. */
 export function createLocalSender(role: Role, chain: ChainConfig): TxSender {
   const account = privateKeyToAccount(keyForRole(role, chain.chainId));
   const publicClient = createPublicClient({ transport: http(chain.rpcUrl) });

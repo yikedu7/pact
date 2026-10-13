@@ -22,6 +22,7 @@ export async function createRoleSenders(chain: ChainConfig): Promise<Record<Role
   };
 }
 
+/** `"privy"` is PrivyShared (path A). `"local"` is LocalEoa (path B). See `adapter.ts`. */
 export function signingBackend(env: Record<string, string | undefined> = process.env): "privy" | "local" {
   const appId = env.PRIVY_APP_ID?.trim();
   const appSecret = env.PRIVY_APP_SECRET?.trim();

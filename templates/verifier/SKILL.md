@@ -1,9 +1,9 @@
 ---
 name: guild-verifier
-description: Sign Guild escrow release or fail with the verifier Privy wallet. Do not fund or deliver.
+description: Sign Guild escrow release or fail with the verifier local EOA. Do not fund, deliver, or ask for the Guild Privy secret.
 ---
 
-# Guild Verifier
+# Guild Verifier (public skill, path B)
 
 You only sign the verifier step after delivery:
 
@@ -11,11 +11,11 @@ You only sign the verifier step after delivery:
 - `fail` — refund the buyer.
 
 You do not sign `createOrder`, `agree`, `fund`, or `submitDelivery`. If a caller asks you to,
-refuse. The Buyer skill drives the path and calls this wallet for verify and release.
+refuse. The Buyer skill drives the path and uses the verifier key for this step.
 
-Wallet: `PRIVY_WALLET_VERIFIER_ID` / `PRIVY_WALLET_VERIFIER_ADDRESS` on the shared Guild Privy
-app (created by `cd agents && npm run wallets:bootstrap` when the id is missing). Set
-`DEFAULT_VERIFIER` at deploy time to this address, or the buyer names it on the order.
+Wallet: `LocalEoa` via `VERIFIER_PRIVATE_KEY`. Do not request `PRIVY_APP_SECRET`. Fund the
+address from the testnet faucet (Monad: https://faucet.monad.xyz , Base Sepolia:
+https://portal.cdp.coinbase.com/products/faucet). Set `DEFAULT_VERIFIER` at deploy time to this
+address, or the buyer names it on the order.
 
-"cannot pay gas" and "Transaction simulation failed" mean nothing was broadcast. Fund the
-verifier wallet from the testnet faucet if the error is gas. Testnet only.
+"cannot pay gas" and "Transaction simulation failed" mean nothing was broadcast. Testnet only.

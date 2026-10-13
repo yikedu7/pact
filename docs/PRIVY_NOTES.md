@@ -92,10 +92,16 @@ Do **not** expose one shared wallet that impersonates all three — judges will 
 
 ## Creating the three wallets
 
-MVP installers use the **shared Guild Privy app** (`PRIVY_APP_ID`, `PRIVY_APP_SECRET`). They do
-not apply for their own Privy app. Bring-your-own Privy is a follow-up.
+This section is **path A only** (the official Guild demo bot, vendor `PrivyShared`). End users of
+that bot do not configure Privy. Guild operators hold `PRIVY_APP_ID` and `PRIVY_APP_SECRET` on
+the bot host, outside git.
 
-On first configure / first escrow run, `agents/` creates any missing role wallet:
+The public skill ([`templates/`](../templates/)) is **path B** (`LocalEoa`). Do not put the Guild
+app secret in that template. Operators generate three local EOAs and use a testnet faucet.
+`UserAaSession` is a follow-up. ZeroDev / a paymaster is an optional later UX upgrade, not the
+self-host default. Bring-your-own Privy is also a follow-up.
+
+Official-bot operators (not public-skill installers) create any missing role wallet on first run:
 
 ```bash
 cd agents && npm run wallets:bootstrap

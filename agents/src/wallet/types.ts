@@ -8,6 +8,11 @@ export interface TxRequest {
   value?: bigint;
 }
 
+/**
+ * Current send surface. `address` is `EscrowWallet.getAddress`, `send` is
+ * `sendEscrowStep`. New vendors should implement `EscrowWallet` in `adapter.ts`
+ * instead of growing this type.
+ */
 export interface TxSender {
   role: Role;
   address: Address;

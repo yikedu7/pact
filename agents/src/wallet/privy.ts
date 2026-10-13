@@ -97,6 +97,7 @@ export async function privySendTransaction(
   return hash;
 }
 
+/** PrivyShared (path A, official Guild demo bot). End users do not set these secrets. */
 export function createPrivySender(
   role: Role,
   cfg: PrivyConfig,

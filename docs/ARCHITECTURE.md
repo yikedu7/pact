@@ -45,15 +45,36 @@ until the relay or peer bot is reachable again.
 **Hackathon proof:** [`docs/demos/2026-10-13-dfcb9220/`](./demos/2026-10-13-dfcb9220/) (negotiation
 `dfcb9220-03b2-4337-96d4-c1460c2a231f`, Monad `orderId` 2, Released).
 
-**After accept:** the Buyer template
-([`templates/buyer/SKILL.md`](../templates/buyer/SKILL.md)) calls `runEscrowAfterAccept` in
-`agents/`. That drives create → agree → fund → deliver → verify → release on the shared Guild
-Privy wallets. Expert signs only `agree` and `submitDelivery`; verifier signs only `release` or
-`fail`. No RelayHost handoff. Wallet ids are created on first run when missing
-(`POST /v1/wallets`). Per-order and UTC-day caps live in the same path.
+**After accept:** the Buyer skill calls `runEscrowAfterAccept` in `agents/`. That drives
+create → agree → fund → deliver → verify → release. Expert signs only `agree` and
+`submitDelivery`; verifier signs only `release` or `fail`. No RelayHost handoff. Per-order and
+UTC-day caps live in the same path.
+
+**Wallet adapter** (same idea as NegotiationChannel): escrow orchestration depends on
+`EscrowWallet` in [`agents/src/wallet/adapter.ts`](../agents/src/wallet/adapter.ts), not on a
+single vendor import over time. This PR documents the shape and names the vendors. `TxSender`
+is still what the CLI calls; it is not a full adapter rewrite.
+
+```ts
+interface EscrowWallet {
+  getAddress(): Address;
+  sendEscrowStep(tx: TxRequest): Promise<Hex>; // today's TxSender.send
+  createIfNeeded?(): Promise<void>;            // PrivyShared only
+  fundHint(): string;                          // faucet URL for that address
+}
+```
+
+| Vendor | Who | Now |
+| --- | --- | --- |
+| `PrivyShared` | Path A, official Guild demo bot. The host holds the shared app secret. Users of the bot do not configure Privy. First run may `POST /v1/wallets`. | implemented |
+| `LocalEoa` | Path B, public skill / self-host ([`templates/`](../templates/)). No Guild `app_secret` in the template. Three local keys, then a testnet faucet. | implemented (`local.ts`) |
+| `UserAaSession` | Later social-login account abstraction. | not implemented |
+
+ZeroDev / a paymaster is an optional UX upgrade on a future AA path. It is not the self-host default.
 
 **Roadmap (not in MVP):** signature-checking relay, real delivery verification, cross-account human
-buyer, directory/friends, Tunnel, bring-your-own Privy app.
+buyer, directory/friends, Tunnel, `UserAaSession`, optional ZeroDev/paymaster. The public skill
+does not take a bring-your-own Privy app.
 
 ## Contracts
 
@@ -231,8 +252,8 @@ All three agents are thin viem clients over the ABI in `out/` and the addresses 
 3. Calls `agree(orderId, specHash)`.
 4. On `OrderFunded`, produces the artifacts, pins the manifest, and calls `submitDelivery`.
 
-**Verifier bot** (the protocol default, address = `defaultVerifier`, which is a Privy server
-wallet):
+**Verifier bot** (the protocol default, address = `defaultVerifier`: the path A Privy verifier
+or the path B verifier EOA):
 
 1. Watches `OrderDelivered` where it is the order's verifier.
 2. Re-checks the spec hash, then evaluates each acceptance criterion: `auto` checks run as code,
@@ -241,25 +262,33 @@ wallet):
 4. Registers itself in the Identity Registry, as the spec requires. This is not enforced on-chain.
 5. As a keeper, it can also call `releaseExpired` and `refundExpired`.
 
-### Wallets (Privy server wallets)
+### Wallets
 
-The off-chain agents sign through Privy server wallets, following
-[`PRIVY_NOTES.md`](./PRIVY_NOTES.md): `sendAs(role, tx)` over Privy's
-`/v1/wallets/{id}/rpc` `eth_sendTransaction`, with gas and the pending nonce taken from the RPC. The
-contracts know nothing about Privy. They only check `msg.sender` against addresses, so any wallet
-that can send a transaction works, whether an EOA, a Privy wallet, or a smart account.
+Escrow calls `EscrowWallet.sendEscrowStep`. Two vendors implement that today.
 
-The note requires one wallet per role under the shared Guild Privy app, never one wallet that
-impersonates all three. Installers set `PRIVY_APP_ID` and `PRIVY_APP_SECRET` only; missing wallet
-ids are created on first run (`npm run wallets:bootstrap` in `agents/`).
+**Path A — `PrivyShared`.** Official demo bot only. `sendAs(role, tx)` is Privy
+`/v1/wallets/{id}/rpc` `eth_sendTransaction` ([`PRIVY_NOTES.md`](./PRIVY_NOTES.md)), with gas and
+the pending nonce taken from the RPC. `createIfNeeded` is `ensurePrivyRoleWallets`. The host
+holds `PRIVY_APP_ID` / `PRIVY_APP_SECRET`. End users do not. One wallet per role, never one
+wallet for all three. The public skill must not contain that app secret.
+
+**Path B — `LocalEoa`.** `createLocalSender` signs with `BUYER_PRIVATE_KEY`,
+`EXPERT_PRIVATE_KEY`, and `VERIFIER_PRIVATE_KEY` (anvil defaults on chain 31337). Operators
+generate those EOAs locally and fund them from `fundHint(chainId)` (Monad faucet, Base Sepolia
+faucet, or prefunded anvil). No Privy secret.
+
+The contracts know nothing about either vendor. They only check `msg.sender`. A later
+`UserAaSession` vendor can satisfy the same interface. ZeroDev / a paymaster would sit behind
+that vendor as an optional gas UX, not as the path B default.
+
 The calls each role signs on `TaskEscrow`:
 
-| Role | Privy env (per the note) | Signs | Address must be |
+| Role | Key material | Signs | Address must be |
 | --- | --- | --- | --- |
-| Buyer | `PRIVY_WALLET_BUYER_ID` | `MockUSDC.approve(escrow)`, `createOrder`, `fund`, `approve` (user mode), `refundExpired` | the order's `buyer` (the `createOrder` sender) |
-| Expert | `PRIVY_WALLET_EXPERT_ID` | `IdentityRegistry.register`, `agree`, `submitDelivery` | owner, `agentWallet` or operator of `sellerAgentId` |
-| Verifier | `PRIVY_WALLET_VERIFIER_ID` | `IdentityRegistry.register`, `release` (pass), `fail` (refund), keeper calls | the order's `verifier`, by default `defaultVerifier` |
-| Deployer | a fourth throwaway EOA or Privy wallet, not the buyer | `Deploy.s.sol` | — |
+| Buyer | Path A `PRIVY_WALLET_BUYER_ID`, or path B `BUYER_PRIVATE_KEY` | `MockUSDC.approve(escrow)`, `createOrder`, `fund`, `approve` (user mode), `refundExpired` | the order's `buyer` (the `createOrder` sender) |
+| Expert | `PRIVY_WALLET_EXPERT_ID` or `EXPERT_PRIVATE_KEY` | `IdentityRegistry.register`, `agree`, `submitDelivery` | owner, `agentWallet` or operator of `sellerAgentId` |
+| Verifier | `PRIVY_WALLET_VERIFIER_ID` or `VERIFIER_PRIVATE_KEY` | `IdentityRegistry.register`, `release` (pass), `fail` (refund), keeper calls | the order's `verifier`, by default `defaultVerifier` |
+| Deployer | a fourth throwaway EOA, not the buyer | `Deploy.s.sol` | — |
 
 The note's "agree" for the buyer corresponds to `createOrder` + `fund`. It is the expert that calls
 `agree(orderId, specHash)` to freeze the spec. The note's "verify → release" is a single
@@ -267,7 +296,7 @@ The note's "agree" for the buyer corresponds to `createOrder` + `fund`. It is th
 
 Wiring notes:
 
-- Deploy with `DEFAULT_VERIFIER` set to the Privy verifier wallet's address. `defaultVerifier` is
+- Deploy with `DEFAULT_VERIFIER` set to the verifier wallet's address (Privy server wallet on path A, local EOA on path B). `defaultVerifier` is
   immutable, so rotating that wallet means either redeploying `TaskEscrow` or having the buyer
   agent name the new address in `OrderParams.verifier` for each order.
 - Payment goes to the expert agent's `agentWallet`, or its owner if none is set. Register the agent

@@ -1,54 +1,48 @@
-# Guild Buyer / Expert / Verifier templates
+# Guild Buyer / Expert / Verifier templates (path B)
 
-Install these three skills on the bot host (Cursor Automations or Grok). Escrow runs in this
-repo after negotiate accept. Do not hand the accepted deal to a separate escrow chat bot.
+Public skill for a self-hosted bot. Escrow runs in this repo after negotiate accept. Do not
+hand the accepted deal to a separate escrow chat bot.
 
-## Configure once
+This template does **not** include the Guild Privy app secret. Signing is `LocalEoa`: three
+keys you generate. The official Guild demo bot (path A, `PrivyShared`) is a different host;
+people using that bot do not configure wallets or Privy.
 
-Set these **bot secrets** (names only — never commit values):
+## Configure
 
-| Secret | Required | Purpose |
-| --- | --- | --- |
-| `PRIVY_APP_ID` | yes | Shared Guild Privy app |
-| `PRIVY_APP_SECRET` | yes | Shared Guild Privy app |
-| `RPC_URL` or `MONAD_TESTNET_RPC` | yes | Monad testnet (`10143`) or Base Sepolia (`84532`) or anvil |
-| `CHAIN_ID` | yes for testnet | `10143` (Monad testnet) |
-| `PRIVY_CAIP2` | yes for Privy sends | `eip155:10143` |
-| `PRIVY_WALLET_BUYER_ID` | after first run | Buyer server wallet |
-| `PRIVY_WALLET_BUYER_ADDRESS` | after first run | Buyer address |
-| `PRIVY_WALLET_EXPERT_ID` | after first run | Expert server wallet |
-| `PRIVY_WALLET_EXPERT_ADDRESS` | after first run | Expert address |
-| `PRIVY_WALLET_VERIFIER_ID` | after first run | Verifier server wallet |
-| `PRIVY_WALLET_VERIFIER_ADDRESS` | after first run | Verifier address |
-| `GUILD_TX_AMOUNT_CAP` | no | Per-order USDC base units. Default `100000000` (100 USDC) |
-| `GUILD_DAILY_AMOUNT_CAP` | no | UTC-day USDC base units. Default `500000000` (500 USDC) |
-
-Creators use the shared Guild app. **Bring your own Privy app is a follow-up**, not this template.
-End-user browser wallets and gas sponsorship are out of scope.
-
-## Auto wallets
-
-When the three `PRIVY_WALLET_*_ID` values are missing, the first configure creates them
-(`POST /v1/wallets`, `chain_type: ethereum`, `User-Agent: PrivyNodeJS/1.0`):
+Leave `PRIVY_APP_ID` and `PRIVY_APP_SECRET` unset.
 
 ```bash
-cd agents && npm run wallets:bootstrap
+cast wallet new    # buyer, then expert, then verifier. Testnet keys only.
+export BUYER_PRIVATE_KEY=0x…
+export EXPERT_PRIVATE_KEY=0x…
+export VERIFIER_PRIVATE_KEY=0x…
+cast wallet address --private-key "$BUYER_PRIVATE_KEY"
 ```
 
-Save the printed ids and addresses as the bot secrets above. The same values are cached in
-gitignored `wallets/guild-roles.json`. Fund all three with testnet gas before the first order.
+Also set `RPC_URL` (or `MONAD_TESTNET_RPC` / `BASE_SEPOLIA_RPC`) and `CHAIN_ID`.
+
+| Chain | Gas |
+| --- | --- |
+| Monad testnet `10143` | https://faucet.monad.xyz |
+| Base Sepolia `84532` | https://portal.cdp.coinbase.com/products/faucet |
+| anvil `31337` | Prefunded. Keys may be omitted; the CLI uses the anvil defaults. |
+
+Send faucet funds to each of the three addresses. If the payment token is not MockUSDC, fund
+the buyer with that token too. MockUSDC can be minted by the buyer during the run.
+
+`UserAaSession` (social-login smart accounts) is not in this template. ZeroDev / a paymaster
+is an optional later upgrade on that path, not what you set up here.
+
+Optional caps (USDC base units, 6 decimals): `GUILD_TX_AMOUNT_CAP` (default `100000000`),
+`GUILD_DAILY_AMOUNT_CAP` (default `500000000`).
 
 ## Self-run
 
-Negotiation still uses the public relay (`guild.negotiate/v0.1`). When the expert **accepts**,
-the Buyer skill runs:
+When the expert **accepts** (`guild.negotiate/v0.1`), the Buyer skill runs:
 
 ```bash
 cd agents && npm run escrow:after-accept -- path/to/accept.json
 ```
-
-That is create → agree → fund → deliver → verify → release (buyer `approve` only when the
-frozen task says `approval_mode: user`).
 
 | Skill | Signs |
 | --- | --- |
@@ -57,3 +51,4 @@ frozen task says `approval_mode: user`).
 | [Verifier](verifier/SKILL.md) | `release` (pass) or `fail` (refund) only. |
 
 Show cap, gas, and simulation errors to the operator as returned. They mean nothing was broadcast.
+A gas error should include the faucet for that chain (`fundHint` in `agents/src/wallet/adapter.ts`).

@@ -18,15 +18,15 @@ suppliers; **Cursor Automations** and **Grok Bot** are first host adapters, not 
 | --- | --- | --- |
 | **Protocol core** | `contracts/`, `deployments/` | `TaskEscrow`, MockUSDC, ERC-8004 registries, JCS `specHash` |
 | **NegotiationChannel** | `relay/` (+ future `agents/` adapters) | `guild.negotiate/v0.1` over HTTPS; public [`guild-relay`](relay/README.md) holds webhook keys so creators share only `/guild-relay/<botId>` |
-| **ExecutionRuntime** | `agents/` | Buyer / expert / verifier skills → viem txs (Privy or local keys) |
+| **ExecutionRuntime** | `agents/` | Buyer / expert / verifier skills → viem txs via a wallet adapter |
 
 **Hackathon demo (2026-10-13):** cross-bot negotiate via the public relay, then Monad testnet order
 **2** released (5 USDC, `ApproveForMe`). Record, tx hashes, and `specHash` notes:
 [`docs/demos/2026-10-13-dfcb9220/`](docs/demos/2026-10-13-dfcb9220/).
 
-**Self-run after accept:** install the Buyer / Expert / Verifier templates and the Buyer
-drives escrow on the shared Guild Privy wallets. No separate RelayHost handoff.
-See [Bot template](#bot-template-shared-privy-then-self-run).
+**Self-run after accept:** the Buyer drives escrow (no separate escrow chat bot).
+Path A is the official demo bot (shared Privy, users configure nothing). Path B is the
+public skill (local EOAs). See [Wallet paths](#wallet-paths).
 
 **Not done (MVP):** real delivery verification, cross-account human buyer, bot directory / friends,
 Tunnel.
@@ -54,7 +54,7 @@ Created → Agreed (spec frozen) → Funded → Delivered → Verified(pass/fail
 | `script/Demo.s.sol` | Runs the spec's "Guild logo, 5 USDC, 24h" order step by step |
 | `script/demo-local.sh` | One-command local demo on anvil (Foundry) |
 | `agents/` | TypeScript buyer / expert / verifier agents (viem + Privy or local keys) |
-| `templates/` | Buyer / Expert / Verifier bot skills: configure Guild Privy once, then self-run escrow after accept |
+| `templates/` | Public Buyer / Expert / Verifier skills (path B: local EOAs, no Guild Privy secret) |
 | `agents/script/demo-local.sh` | Deploy on anvil + run the logo demo via the agents CLI |
 | `relay/` | Supabase Edge Function `guild-relay` (public delivery proxy; no secrets in git) |
 | `docs/demos/` | Sanitized end-to-end demo records (negotiation + on-chain) |
@@ -193,56 +193,104 @@ agents, `createOrder` → `agree` → `fund` → `submitDelivery` → `release`/
 `approve` when `approval_mode=user`. Criteria JSON is hashed with RFC 8785 (JCS), matching
 `TaskEscrow.hashSpec` and the pinned vector in `test/Demo.t.sol`.
 
-**Signing:** with `PRIVY_APP_ID` and `PRIVY_APP_SECRET` set to the shared Guild Privy app,
-transactions go through Privy `eth_sendTransaction` (see [`docs/PRIVY_NOTES.md`](docs/PRIVY_NOTES.md)).
-If `PRIVY_WALLET_*_ID` is unset, the first run creates three Ethereum server wallets
-(buyer, expert, verifier) via `POST /v1/wallets` and writes ids under gitignored `wallets/`.
-Set `PRIVY_CAIP2` (Monad testnet default `eip155:10143`) and the wallet addresses once they
-exist. Without Privy env vars, the CLI uses local private keys (anvil defaults on chain `31337`).
+**Signing** goes through a wallet adapter ([`agents/src/wallet/adapter.ts`](agents/src/wallet/adapter.ts)):
+`getAddress()`, `sendEscrowStep` (today's `TxSender.send`), optional `createIfNeeded()`, and
+`fundHint()` (a faucet link). Vendors: `PrivyShared` (path A), `LocalEoa` (path B),
+`UserAaSession` (not built). Escrow should depend on that shape, not on one vendor. The CLI
+still picks Privy when `PRIVY_APP_ID` and `PRIVY_APP_SECRET` are set, and local keys otherwise.
+See [`docs/PRIVY_NOTES.md`](docs/PRIVY_NOTES.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ```bash
 cd agents && npm ci && npm test && npm run typecheck
 ```
 
-## Bot template: shared Privy, then self-run
+## Wallet paths
 
-Creators install [`templates/`](templates/) and use **one shared Guild Privy app**. They do not
-apply for their own Privy app on the MVP path. Bring-your-own Privy, browser wallets, and
-gas sponsorship are follow-ups, not this path.
+Two ways to sign. Both run the same post-accept escrow. Neither path puts a Guild
+`PRIVY_APP_SECRET` in the public template.
 
-1. Set bot secrets `PRIVY_APP_ID` and `PRIVY_APP_SECRET` (the Guild demo app), plus
-   `RPC_URL` or `MONAD_TESTNET_RPC`, `CHAIN_ID=10143`, and `PRIVY_CAIP2=eip155:10143`.
-2. First configure creates the three role wallets when ids are missing:
+### Path A — official Guild demo bot (`PrivyShared`)
+
+The hosted demo bot already holds the shared Guild Privy app. **Users of that bot do not
+configure Privy.** On first run the bot creates buyer, expert, and verifier server wallets
+(`POST /v1/wallets`, `User-Agent: PrivyNodeJS/1.0`) if ids are missing, then after an expert
+accept it runs escrow itself. Guild operators keep `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, and
+`PRIVY_WALLET_*` as host secrets (see [`docs/PRIVY_NOTES.md`](docs/PRIVY_NOTES.md)). Do not
+copy those into a skill file or into git.
 
 ```bash
 cd agents && npm run wallets:bootstrap
+cd agents && npm run escrow:after-accept -- ../accept.json
 ```
 
-Copy the printed `PRIVY_WALLET_*_ID` and `PRIVY_WALLET_*_ADDRESS` lines into the bot secret
-store. Do not commit them. Fund the wallets with testnet gas (and the buyer with the payment
-token, unless it is MockUSDC).
+### Path B — public skill / self-hosted (`LocalEoa`)
 
-3. After the expert sends `guild.negotiate/v0.1` `accept`, the **Buyer** template runs escrow
-   itself. Expert only signs `agree` and `submitDelivery`. Verifier only signs `release` or
-   `fail`. There is no handoff to a separate escrow chat bot.
+[`templates/`](templates/) is this path. **Do not ship the Guild app secret.** Generate three
+throwaway testnet EOAs (buyer, expert, verifier). On chain `31337`, anvil's default keys are
+used when the env vars are unset.
+
+```bash
+cast wallet new    # repeat for each role; never a key that holds real funds
+export BUYER_PRIVATE_KEY=0x…
+export EXPERT_PRIVATE_KEY=0x…
+export VERIFIER_PRIVATE_KEY=0x…
+cast wallet address --private-key "$BUYER_PRIVATE_KEY"
+```
+
+Leave `PRIVY_APP_ID` and `PRIVY_APP_SECRET` empty so the CLI stays on `LocalEoa`. Fund each
+address with testnet gas, then run the same accept command:
+
+| Chain | `fundHint` |
+| --- | --- |
+| Monad testnet `10143` | [faucet.monad.xyz](https://faucet.monad.xyz) |
+| Base Sepolia `84532` | [Base Sepolia faucet](https://portal.cdp.coinbase.com/products/faucet) |
+| anvil `31337` | Prefunded dev accounts |
+
+Also fund the buyer with the payment token when it is not MockUSDC (the demo mints MockUSDC).
+
+`UserAaSession` (social-login account abstraction) is a follow-up. ZeroDev / a paymaster is an
+optional UX upgrade on that later path, not the self-host default.
+
+### After accept (both paths)
+
+The Buyer skill runs create → agree → fund → deliver → verify → release. Expert signs only
+`agree` and `submitDelivery`. Verifier signs only `release` or `fail`. No handoff to a separate
+escrow chat bot.
 
 ```bash
 cd agents && npm run escrow:after-accept -- ../accept.json
 ```
 
-`accept.json` is either the accept envelope or a negotiation record whose `latest` message is
-that accept (the shape in `docs/demos/2026-10-13-dfcb9220/`). Approval mode comes from the
-frozen task. `SCENARIO=pass|fail|timeout` is only a demo knob.
+`accept.json` is the accept envelope or a negotiation record whose `latest` message is that
+accept (`docs/demos/2026-10-13-dfcb9220/`). Approval mode comes from the frozen task.
+`SCENARIO=pass|fail|timeout` is only a demo knob.
 
-Caps (USDC base units, 6 decimals) are enforced before any transaction:
+Caps (USDC base units, 6 decimals) apply before any transaction:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `GUILD_TX_AMOUNT_CAP` | `100000000` (100 USDC) | Maximum one order can escrow |
 | `GUILD_DAILY_AMOUNT_CAP` | `500000000` (500 USDC) | UTC-day cumulative funds |
 
-A breach, an empty gas balance, or a failed simulation throws a short error and does not
+A cap breach, an empty gas balance, or a failed simulation throws a short error and does not
 broadcast. The 5 USDC logo demo fits the defaults.
+
+### Wallet adapter
+
+```ts
+interface EscrowWallet {
+  getAddress(): Address;
+  sendEscrowStep(tx): Promise<Hex>;
+  createIfNeeded?(): Promise<void>;
+  fundHint(): string;
+}
+```
+
+| Vendor | Path | In this PR |
+| --- | --- | --- |
+| `PrivyShared` | A, official demo bot | `createPrivySender` + `ensurePrivyRoleWallets` |
+| `LocalEoa` | B, public skill | `createLocalSender` |
+| `UserAaSession` | later | not implemented |
 
 ### Local anvil (one command)
 
