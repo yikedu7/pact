@@ -32,7 +32,9 @@ Created → Agreed (spec frozen) → Funded → Delivered → Verified(pass/fail
 | `contracts/mocks/MockUSDC.sol` | 6-decimal test token with open `mint` |
 | `script/Deploy.s.sol` | Deploys the stack and writes `deployments/<chainId>.json` |
 | `script/Demo.s.sol` | Runs the spec's "Guild logo, 5 USDC, 24h" order step by step |
-| `script/demo-local.sh` | One-command local demo on anvil |
+| `script/demo-local.sh` | One-command local demo on anvil (Foundry) |
+| `agents/` | TypeScript buyer / expert / verifier agents (viem + Privy or local keys) |
+| `agents/script/demo-local.sh` | Deploy on anvil + run the logo demo via the agents CLI |
 | `test/` | Unit, fuzz, and invariant tests |
 
 ## Quickstart
@@ -161,9 +163,57 @@ forge test --gas-report
 CI (`.github/workflows/ci.yml`) runs format, lint, build, and the full test suite on both the
 `ethereum` and `monad` network profiles.
 
-The TypeScript buyer agent, expert bot, and verifier bot (viem) come in the next PR. They will sign
-with Privy server wallets, one per role, as described in [`docs/PRIVY_NOTES.md`](docs/PRIVY_NOTES.md).
-The contracts only check addresses, so nothing on-chain depends on Privy. Set `DEFAULT_VERIFIER` to
-the Privy verifier wallet's address when deploying. See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#wallets-privy-server-wallets) for the role-to-call
-mapping and wiring notes.
+## TypeScript agents (logo demo)
+
+Off-chain agents live in [`agents/`](agents/). They mirror `script/Demo.s.sol`: register ERC-8004
+agents, `createOrder` → `agree` → `fund` → `submitDelivery` → `release`/`fail`, then buyer
+`approve` when `approval_mode=user`. Criteria JSON is hashed with RFC 8785 (JCS), matching
+`TaskEscrow.hashSpec` and the pinned vector in `test/Demo.t.sol`.
+
+**Signing:** with `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, and the three `PRIVY_WALLET_*_ID` values set,
+transactions go through Privy `eth_sendTransaction` (see [`docs/PRIVY_NOTES.md`](docs/PRIVY_NOTES.md)).
+You must also set `PRIVY_WALLET_*_ADDRESS` for gas estimation and `PRIVY_CAIP2` once Privy's CAIP-2
+for Monad testnet is confirmed. Without Privy env vars, the CLI uses local private keys (anvil
+defaults on chain `31337`).
+
+```bash
+cd agents && npm ci && npm test && npm run typecheck
+```
+
+### Local anvil (one command)
+
+```bash
+./agents/script/demo-local.sh
+```
+
+### Against a deployed testnet
+
+1. Deploy with Foundry (`deployments/<chainId>.json` is written automatically).
+2. Fund the three role wallets with native gas; mint or transfer MockUSDC to the buyer.
+3. Set `DEFAULT_VERIFIER` at deploy time to the Privy verifier address (or pass that address in
+   `OrderParams.verifier` from the buyer agent).
+
+**Monad testnet** — chain id `10143`, CAIP-2 `eip155:10143` (verify in Privy before demo day):
+
+```bash
+export RPC_URL="$MONAD_TESTNET_RPC"
+export CHAIN_ID=10143
+# Privy + wallet ids, or BUYER_/EXPERT_/VERIFIER_PRIVATE_KEY for a dry key-based smoke test
+export SCENARIO=pass APPROVAL_MODE=approve_for_me
+cd agents && npm run demo
+```
+
+**Base Sepolia fallback** — chain id `84532`, CAIP-2 `eip155:84532`:
+
+```bash
+export RPC_URL="$BASE_SEPOLIA_RPC"
+export CHAIN_ID=84532
+export PRIVY_CAIP2=eip155:84532
+cd agents && npm run demo
+```
+
+CI runs `agents` typecheck and unit tests without live Privy. Set `EXPERT_AGENT_ID`,
+`BUYER_AGENT_ID`, and `VERIFIER_AGENT_ID` to reuse agents from a previous run.
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#wallets-privy-server-wallets) for the full
+role-to-call mapping.
