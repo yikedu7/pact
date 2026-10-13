@@ -197,7 +197,8 @@ All three agents are thin viem clients over the ABI in `out/` and the addresses 
 3. Calls `agree(orderId, specHash)`.
 4. On `OrderFunded`, produces the artifacts, pins the manifest, and calls `submitDelivery`.
 
-**Verifier bot** (the protocol default, address = `defaultVerifier`):
+**Verifier bot** (the protocol default, address = `defaultVerifier`, which is a Privy server
+wallet):
 
 1. Watches `OrderDelivered` where it is the order's verifier.
 2. Re-checks the spec hash, then evaluates each acceptance criterion: `auto` checks run as code,
@@ -206,10 +207,44 @@ All three agents are thin viem clients over the ABI in `out/` and the addresses 
 4. Registers itself in the Identity Registry, as the spec requires. This is not enforced on-chain.
 5. As a keeper, it can also call `releaseExpired` and `refundExpired`.
 
-**Wallets.** The verifier and deploy keys will move to Privy server wallets (later PR). The escrow
-only needs the verifier to be an EOA or contract that can send the `release`/`fail` transaction. A
-per-order `verifier` lets a new wallet be used without redeploying. Changing the *default* verifier
-requires redeploying `TaskEscrow`, because `defaultVerifier` is immutable.
+### Wallets (Privy server wallets)
+
+The off-chain agents sign through Privy server wallets, following
+[`PRIVY_NOTES.md`](./PRIVY_NOTES.md): `sendAs(role, tx)` over Privy's
+`/v1/wallets/{id}/rpc` `eth_sendTransaction`, with gas and the pending nonce taken from the RPC. The
+contracts know nothing about Privy. They only check `msg.sender` against addresses, so any wallet
+that can send a transaction works, whether an EOA, a Privy wallet, or a smart account.
+
+The note requires one wallet per role under a dedicated testnet Privy app, never one shared wallet.
+The calls each role signs on `TaskEscrow`:
+
+| Role | Privy env (per the note) | Signs | Address must be |
+| --- | --- | --- | --- |
+| Buyer | `PRIVY_WALLET_BUYER_ID` | `MockUSDC.approve(escrow)`, `createOrder`, `fund`, `approve` (user mode), `refundExpired` | the order's `buyer` (the `createOrder` sender) |
+| Expert | `PRIVY_WALLET_EXPERT_ID` | `IdentityRegistry.register`, `agree`, `submitDelivery` | owner, `agentWallet` or operator of `sellerAgentId` |
+| Verifier | `PRIVY_WALLET_VERIFIER_ID` | `IdentityRegistry.register`, `release` (pass), `fail` (refund), keeper calls | the order's `verifier`, by default `defaultVerifier` |
+| Deployer | a fourth throwaway EOA or Privy wallet, not the buyer | `Deploy.s.sol` | — |
+
+The note's "agree" for the buyer corresponds to `createOrder` + `fund`. It is the expert that calls
+`agree(orderId, specHash)` to freeze the spec. The note's "verify → release" is a single
+`release` call, plus a buyer `approve` in `user` mode.
+
+Wiring notes:
+
+- Deploy with `DEFAULT_VERIFIER` set to the Privy verifier wallet's address. `defaultVerifier` is
+  immutable, so rotating that wallet means either redeploying `TaskEscrow` or having the buyer
+  agent name the new address in `OrderParams.verifier` for each order.
+- Payment goes to the expert agent's `agentWallet`, or its owner if none is set. Register the agent
+  from the Privy expert wallet, or point `agentWallet` at it with `setAgentWallet`. Privy wallets
+  can produce the EIP-712 signature that `setAgentWallet` needs.
+- Chains: Base Sepolia is `eip155:84532`. For Monad testnet (chain id 10143), use the CAIP-2 that
+  Privy lists. If Privy does not support it, the same addresses work on Base Sepolia, because the
+  deployment is just a config switch.
+- Privy credentials (`PRIVY_APP_ID`, `PRIVY_APP_SECRET`, and the wallet ids) belong to the
+  TypeScript agents (next PR). They are not read by any Foundry script. Never commit them.
+  `.gitignore` excludes `privy.json`, `wallet.json` and `wallets/`.
+- `script/Demo.s.sol` signs with raw testnet keys (anvil keys locally) as a stand-in. The
+  TypeScript demo replaces each `vm.broadcast(key)` with `sendAs(role, tx)`, in the same order.
 
 **Events to index:** `OrderCreated`, `OrderAgreed`, `OrderFunded`, `OrderDelivered`,
 `OrderVerified`, `OrderReleased`, `OrderRefunded`, `FulfillmentRecorded`, `ReputationWriteFailed`

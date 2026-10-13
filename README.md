@@ -14,6 +14,8 @@ type, amount, pass/fail, on time) to an ERC-8004 Reputation Registry.
 - Product spec (source of truth): [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md)
 - Contracts, state machine, hashing, reputation format, and agent integration:
   [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- Off-chain signing with Privy server wallets (one per role: buyer, expert, verifier):
+  [`docs/PRIVY_NOTES.md`](docs/PRIVY_NOTES.md)
 
 ```
 Created → Agreed (spec frozen) → Funded → Delivered → Verified(pass/fail) → Released | Refunded
@@ -159,7 +161,9 @@ forge test --gas-report
 CI (`.github/workflows/ci.yml`) runs format, lint, build, and the full test suite on both the
 `ethereum` and `monad` network profiles.
 
-The TypeScript buyer agent, expert bot, and verifier bot (viem) come in the next PR. Privy server
-wallets for the verifier and deployer come later. See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#off-chain-agents-next-pr-typescript--viem) for the
-integration contract.
+The TypeScript buyer agent, expert bot, and verifier bot (viem) come in the next PR. They will sign
+with Privy server wallets, one per role, as described in [`docs/PRIVY_NOTES.md`](docs/PRIVY_NOTES.md).
+The contracts only check addresses, so nothing on-chain depends on Privy. Set `DEFAULT_VERIFIER` to
+the Privy verifier wallet's address when deploying. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#wallets-privy-server-wallets) for the role-to-call
+mapping and wiring notes.

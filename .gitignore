@@ -11,6 +11,10 @@ deployments/31337.json
 .env
 .env.*
 !.env.example
+# Privy connector secrets / wallet metadata (docs/PRIVY_NOTES.md)
+privy.json
+wallet.json
+wallets/
 
 # OS / editors
 .DS_Store
