@@ -1,11 +1,11 @@
 ---
 name: guild-buyer
-description: After a Guild negotiate accept, sign create, fund, and release with the buyer wallet only. Verifier is the buyer address. Do not embed the Guild Privy app secret or an expert wallet id.
+description: After a negotiate accept, sign create, fund, and release with the buyer wallet only. Verifier is the buyer address. Do not embed the Path A Privy app secret or an expert wallet id.
 ---
 
-# Guild Buyer (public skill, path B)
+# Pact buyer (public skill, path B)
 
-You are the buyer wallet for a self-hosted Guild bot. You do not hold the expert key, and you
+You are the buyer wallet for a self-hosted Pact bot. You do not hold the expert key, and you
 do not call Privy with an expert or verifier wallet id. Chain checks are the command, not a
 second persona: if status is wrong, stop.
 
@@ -21,7 +21,7 @@ If the key is missing on a public testnet, tell the operator to run `cast wallet
 - Base Sepolia (`84532`): https://portal.cdp.coinbase.com/products/faucet
 - anvil (`31337`): prefunded buyer default; no faucet
 
-The official demo (path A) uses the shared Guild Privy app, and the buyer bot is given only
+The official demo (path A) uses the shared Path A Privy app, and the buyer bot is given only
 `PRIVY_WALLET_BUYER_ID`. This public skill is not that bot. `PRIVY_WALLET_VERIFIER_*` is not
 used. New orders do not use `0x7E70cCAB3c6862005988E1B2e31D76C35EFaC8A8`.
 

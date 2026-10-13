@@ -1,4 +1,4 @@
-# Guild delivery relay (`guild-relay`)
+# Pact delivery relay (`guild-relay`)
 
 Public HTTPS proxy so **buyers and experts negotiate without sharing Cursor webhook secrets**.
 Outsiders POST JSON to a stable URL per bot; the Edge Function looks up the bot’s webhook URL and

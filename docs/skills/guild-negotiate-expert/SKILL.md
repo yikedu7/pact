@@ -3,7 +3,7 @@ name: guild-negotiate-expert
 description: Path A expert. Negotiate over the public guild-relay, then sign agree and submitDelivery with the expert Privy wallet only.
 ---
 
-# Guild negotiate expert (Path A)
+# Pact negotiate expert (Path A)
 
 You are the expert bot. Cross-bot traffic uses the **public guild-relay** only. You sign
 `agree` and `submitDelivery` with the **expert wallet only**. You do not fund, release, or
@@ -38,7 +38,7 @@ Expert bot card:
 
 | Name | On this bot |
 | --- | --- |
-| `PRIVY_APP_ID`, `PRIVY_APP_SECRET` | Same shared Guild Privy app as the buyer. |
+| `PRIVY_APP_ID`, `PRIVY_APP_SECRET` | Same shared Path A Privy app as the buyer (official demo). |
 | `PRIVY_WALLET_EXPERT_ID`, `PRIVY_WALLET_EXPERT_ADDRESS` | This bot only. |
 | `RPC_URL` or `MONAD_TESTNET_RPC`, `CHAIN_ID` | Same chain as the buyer. |
 | `GUILD_NEXT_RELAY_URL` | Optional. Public relay URL of the **buyer** bot, used to POST the next cue. |

@@ -1,4 +1,4 @@
-# Privy notes for agent-escrow (RH reference)
+# Privy notes for Pact (RH reference)
 
 Audience: Engineering Lead / acceptance bot.  
 Source of truth for RH ops: fund-harness `packages/evm/wallets/custodial/*` (and RH agent `lib/evm_ops` mirror).  
@@ -58,7 +58,7 @@ RH mainnet today is Robinhood `eip155:4663` — irrelevant to escrow demo except
 
 ## Two wallets for the escrow demo
 
-Path A uses **two addresses** under the **same Guild Privy app**. The buyer bot holds only the
+Path A uses **two addresses** under the **same Path A Privy app** (official demo). The buyer bot holds only the
 buyer wallet id. The expert bot holds only the expert wallet id. `createOrder.verifier` is the
 buyer address, so the buyer also signs `release` / `fail`. Do not require
 `PRIVY_WALLET_VERIFIER_*`. The Monad `defaultVerifier` `0x7E70cCAB3c6862005988E1B2e31D76C35EFaC8A8`
@@ -95,12 +95,12 @@ Do **not** put both wallet ids in one process, and do **not** add a third verifi
 
 ## Creating the three wallets
 
-This section is **path A only** (the official Guild demo bot, vendor `PrivyShared`). End users of
-that bot do not configure Privy. Guild operators hold `PRIVY_APP_ID` and `PRIVY_APP_SECRET` on
+This section is **path A only** (the official Pact demo bot, vendor `PrivyShared`). End users of
+that bot do not configure Privy. Pact demo operators hold `PRIVY_APP_ID` and `PRIVY_APP_SECRET` on
 the bot host, outside git.
 
-The public skill ([`templates/`](../templates/)) is **path B** (`LocalEoa`). Do not put the Guild
-app secret in that template. Operators generate three local EOAs and use a testnet faucet.
+The public skill ([`templates/`](../templates/)) is **path B** (`LocalEoa`). Do not put the Path A
+Privy app secret in that template. Operators generate three local EOAs and use a testnet faucet.
 `UserAaSession` is a follow-up. ZeroDev / a paymaster is an optional later UX upgrade, not the
 self-host default. Bring-your-own Privy is also a follow-up.
 

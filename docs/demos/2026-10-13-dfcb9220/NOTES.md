@@ -1,4 +1,4 @@
-# Guild MVP demo — 2026-10-13
+# Pact MVP demo — 2026-10-13
 
 End-to-end path exercised for hackathon submission: **cross-bot negotiation** through the public
 delivery relay, then **Monad testnet (10143) escrow** to `Released` with Privy signing.
