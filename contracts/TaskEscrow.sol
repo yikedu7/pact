@@ -11,19 +11,22 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @title TaskEscrow
-/// @notice Agent-to-agent task escrow with ERC-8004 reputation.
+/// @notice Agent-to-agent task escrow with ERC-8004 reputation (docs/PRODUCT_SPEC.md).
 ///
-///         Created --agree--> Agreed --fund--> Funded --submitDelivery--> Delivered --verify--> Verified
-///         Verified --release--> Released
-///         Delivered --fail--> Refunded                       (verifier: delivery does not meet spec)
-///         Funded --refundExpired--> Refunded                 (after deliverBy, nothing delivered)
-///         Delivered --refundExpired--> Refunded              (verifier silent past the verify window)
+///         createOrder            buyer     -> Created
+///         agree(specHash)        expert    Created   -> Agreed     (spec hash frozen)
+///         fund                   buyer     Agreed    -> Funded
+///         submitDelivery         expert    Funded    -> Delivered  (content hash + URI only)
+///         release                verifier  Delivered -> Verified(pass) [-> Released if approve_for_me]
+///         fail                   verifier  Delivered -> Verified(fail) -> Refunded
+///         approve                buyer     Verified  -> Released   (approval_mode = user)
+///         releaseExpired         anyone    Verified  -> Released   (buyer silent past review window)
+///         refundExpired          anyone    Funded    -> Refunded   (nothing delivered by deliverBy)
+///                                          Delivered -> Refunded   (verifier silent past review window)
 ///
-///         The buyer freezes `specHash` (keccak256 of the canonical delivery-criteria JSON) at creation
-///         and designates a verifier address. Outcomes attributable to the seller are written to the
-///         ERC-8004 reputation registry with this contract as `clientAddress`, so readers can filter for
-///         payment-backed feedback.
-/// @dev    TESTNET MVP. No admin, no fees, no upgradability, no dispute resolution.
+///         Each settled order writes ERC-8004 feedback (task_type, amount, passed, on_time) for the
+///         expert and, if registered, the buyer agent, with this contract as `clientAddress`.
+/// @dev    TESTNET MVP. No admin, no fees, no upgradability. `Disputed` is reserved and never entered.
 contract TaskEscrow is ITaskEscrow, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -34,6 +37,8 @@ contract TaskEscrow is ITaskEscrow, ReentrancyGuard {
     IERC20 public immutable paymentToken;
     IIdentityRegistry public immutable identityRegistry;
     IReputationRegistry public immutable reputationRegistry;
+    /// @notice Protocol-provided verifier bot used when an order does not designate its own.
+    address public immutable defaultVerifier;
 
     uint256 public nextOrderId = 1;
 
@@ -41,10 +46,15 @@ contract TaskEscrow is ITaskEscrow, ReentrancyGuard {
 
     error RegistryMismatch(address expected, address actual);
 
-    constructor(IERC20 paymentToken_, IIdentityRegistry identityRegistry_, IReputationRegistry reputationRegistry_) {
+    constructor(
+        IERC20 paymentToken_,
+        IIdentityRegistry identityRegistry_,
+        IReputationRegistry reputationRegistry_,
+        address defaultVerifier_
+    ) {
         if (
             address(paymentToken_) == address(0) || address(identityRegistry_) == address(0)
-                || address(reputationRegistry_) == address(0)
+                || address(reputationRegistry_) == address(0) || defaultVerifier_ == address(0)
         ) revert ZeroAddress();
         address linked = reputationRegistry_.getIdentityRegistry();
         if (linked != address(identityRegistry_)) revert RegistryMismatch(address(identityRegistry_), linked);
@@ -52,74 +62,70 @@ contract TaskEscrow is ITaskEscrow, ReentrancyGuard {
         paymentToken = paymentToken_;
         identityRegistry = identityRegistry_;
         reputationRegistry = reputationRegistry_;
+        defaultVerifier = defaultVerifier_;
     }
 
     // ---------------------------------------------------------------------
     // Buyer
     // ---------------------------------------------------------------------
 
-    /// @notice Opens an order and freezes its delivery criteria.
-    /// @param sellerAgentId ERC-8004 agent id of the seller. Payee is its `agentWallet` (or owner) now.
-    /// @param verifier Designated address allowed to `verify` / `fail` the delivery.
-    /// @param specHash keccak256 of the canonicalized delivery-criteria JSON (see docs/ARCHITECTURE.md).
-    /// @param specURI Where the criteria JSON can be fetched. Emitted only.
-    /// @param taskType Category used as ERC-8004 `tag1` / `task_type`; 1-32 chars of `[a-z0-9_.-]`.
-    /// @param deliverBy On-time cutoff. After it, the buyer may reclaim an undelivered order.
-    /// @param verifyWindow Seconds the verifier has after delivery to `verify` or `fail`.
-    function createOrder(
-        uint256 sellerAgentId,
-        address verifier,
-        uint256 amount,
-        bytes32 specHash,
-        string calldata specURI,
-        string calldata taskType,
-        uint64 deliverBy,
-        uint32 verifyWindow
-    ) external returns (uint256 orderId) {
-        if (amount == 0) revert ZeroAmount();
-        if (specHash == bytes32(0)) revert ZeroHash();
-        if (!FulfillmentFeedback.isValidTaskType(taskType)) revert InvalidTaskType(taskType);
-        if (deliverBy <= block.timestamp) revert InvalidDeadline(deliverBy);
-        if (verifyWindow == 0) revert InvalidVerifyWindow(verifyWindow);
+    /// @notice Proposes an order. Nothing is escrowed until the expert agrees and the buyer funds.
+    /// @dev    `params.specHash` is keccak256 of the canonicalized (RFC 8785) delivery-criteria JSON.
+    ///         `params.buyerAgentId` is optional (0 = unregistered buyer, no buyer-side feedback).
+    ///         `params.verifier` is optional (0 = `defaultVerifier`).
+    function createOrder(OrderParams calldata params) external returns (uint256 orderId) {
+        if (params.amount == 0) revert ZeroAmount();
+        if (params.specHash == bytes32(0)) revert ZeroHash();
+        if (!FulfillmentFeedback.isValidTaskType(params.taskType)) revert InvalidTaskType(params.taskType);
+        if (params.deliverBy <= block.timestamp) revert InvalidDeadline(params.deliverBy);
+        if (params.reviewWindow == 0) revert InvalidReviewWindow(params.reviewWindow);
 
-        address agentOwner = IERC721(address(identityRegistry)).ownerOf(sellerAgentId);
-        address payee = identityRegistry.getAgentWallet(sellerAgentId);
+        address agentOwner = IERC721(address(identityRegistry)).ownerOf(params.sellerAgentId);
+        address payee = identityRegistry.getAgentWallet(params.sellerAgentId);
         if (payee == address(0)) payee = agentOwner;
-
         if (msg.sender == payee || msg.sender == agentOwner) revert SelfDealing(msg.sender);
-        if (verifier == address(0) || verifier == msg.sender || verifier == payee || verifier == agentOwner) {
-            revert InvalidVerifier(verifier);
-        }
+
+        if (
+            params.buyerAgentId != 0
+                && (params.buyerAgentId == params.sellerAgentId || !_controlsAgent(params.buyerAgentId, msg.sender))
+        ) revert InvalidBuyerAgent(params.buyerAgentId);
+
+        address verifier = params.verifier == address(0) ? defaultVerifier : params.verifier;
+        if (verifier == msg.sender || verifier == payee || verifier == agentOwner) revert InvalidVerifier(verifier);
 
         orderId = nextOrderId++;
         Order storage o = _orders[orderId];
         o.buyer = msg.sender;
-        o.deliverBy = deliverBy;
+        o.deliverBy = params.deliverBy;
         o.status = Status.Created;
+        o.approvalMode = params.approvalMode;
         o.payee = payee;
         o.verifier = verifier;
-        o.verifyWindow = verifyWindow;
-        o.sellerAgentId = sellerAgentId;
-        o.amount = amount;
-        o.specHash = specHash;
-        o.taskType = taskType;
+        o.reviewWindow = params.reviewWindow;
+        o.sellerAgentId = params.sellerAgentId;
+        o.buyerAgentId = params.buyerAgentId;
+        o.amount = params.amount;
+        o.specHash = params.specHash;
+        o.taskType = params.taskType;
 
         emit OrderCreated(
             orderId,
             msg.sender,
-            sellerAgentId,
+            params.sellerAgentId,
+            params.buyerAgentId,
             payee,
             verifier,
-            amount,
-            specHash,
-            specURI,
-            taskType,
-            deliverBy,
-            verifyWindow
+            params.amount,
+            params.specHash,
+            params.specURI,
+            params.taskType,
+            params.deliverBy,
+            params.reviewWindow,
+            params.approvalMode
         );
     }
 
-    /// @notice Pulls `amount` of `paymentToken` from the buyer into escrow once the seller agreed.
+    /// @notice Pulls `amount` of `paymentToken` from the buyer into escrow once the expert agreed.
     function fund(uint256 orderId) external nonReentrant {
         Order storage o = _orders[orderId];
         _requireStatus(orderId, o, Status.Agreed);
@@ -136,22 +142,32 @@ contract TaskEscrow is ITaskEscrow, ReentrancyGuard {
         emit OrderFunded(orderId, msg.sender, o.amount);
     }
 
+    /// @notice User approval after a verifier pass (`approval_mode = user`). Approving after the review
+    ///         window is still accepted but recorded as late for the buyer.
+    function approve(uint256 orderId) external nonReentrant {
+        Order storage o = _orders[orderId];
+        _requireStatus(orderId, o, Status.Verified);
+        if (msg.sender != o.buyer) revert NotBuyer(orderId, msg.sender);
+        _release(orderId, o, block.timestamp <= o.verifiedAt + o.reviewWindow);
+    }
+
     // ---------------------------------------------------------------------
-    // Seller
+    // Expert (seller)
     // ---------------------------------------------------------------------
 
-    /// @notice Seller accepts the frozen spec, price, verifier and deadline.
-    function agree(uint256 orderId) external {
+    /// @notice Expert accepts the order terms. `specHash` must equal the proposed hash, which freezes it.
+    function agree(uint256 orderId, bytes32 specHash) external {
         Order storage o = _orders[orderId];
         _requireStatus(orderId, o, Status.Created);
         if (!_isSeller(o, msg.sender)) revert NotSeller(orderId, msg.sender);
+        if (specHash != o.specHash) revert SpecMismatch(o.specHash, specHash);
         if (block.timestamp > o.deliverBy) revert OrderExpired(orderId, o.deliverBy);
 
         o.status = Status.Agreed;
-        emit OrderAgreed(orderId, msg.sender);
+        emit OrderAgreed(orderId, msg.sender, specHash);
     }
 
-    /// @notice Commits to a delivery by content hash + URI (the payload itself stays off-chain).
+    /// @notice Commits to a delivery by content hash + URI (the artifact itself stays off-chain).
     ///         Late delivery is accepted until someone calls `refundExpired`, and is recorded as late.
     function submitDelivery(uint256 orderId, bytes32 deliveryHash, string calldata deliveryURI) external {
         Order storage o = _orders[orderId];
@@ -172,71 +188,48 @@ contract TaskEscrow is ITaskEscrow, ReentrancyGuard {
     // Verifier
     // ---------------------------------------------------------------------
 
-    /// @notice Delivery meets the spec. Funds become releasable and can no longer be refunded.
-    function verify(uint256 orderId, bytes32 reportHash, string calldata reportURI) external {
+    /// @notice Verdict: delivery passes every acceptance criterion. Releases immediately when the order
+    ///         is `ApproveForMe`; otherwise waits in `Verified` for the buyer's `approve`.
+    /// @param resultHash keccak256 of the structured per-criterion verification result JSON.
+    function release(uint256 orderId, bytes32 resultHash, string calldata resultURI) external nonReentrant {
         Order storage o = _orders[orderId];
-        _requireVerifiable(orderId, o);
-
-        o.status = Status.Verified;
-        o.reportHash = reportHash;
-        emit OrderVerified(orderId, msg.sender, reportHash, reportURI);
+        _recordVerdict(orderId, o, true, resultHash, resultURI);
+        if (o.approvalMode == ApprovalMode.ApproveForMe) _release(orderId, o, true);
     }
 
-    /// @notice Pays the seller and records `passed = true` feedback. Callable by the verifier, or by
-    ///         the payee so settlement does not depend on verifier liveness once verified.
-    function release(uint256 orderId) external nonReentrant {
+    /// @notice Verdict: delivery fails the spec. Refunds the buyer.
+    function fail(uint256 orderId, bytes32 resultHash, string calldata resultURI) external nonReentrant {
+        Order storage o = _orders[orderId];
+        _recordVerdict(orderId, o, false, resultHash, resultURI);
+        _refund(orderId, o, RefundReason.Failed);
+    }
+
+    // ---------------------------------------------------------------------
+    // Anyone (keepers)
+    // ---------------------------------------------------------------------
+
+    /// @notice Pays the expert when a passed order was not approved within the review window.
+    function releaseExpired(uint256 orderId) external nonReentrant {
         Order storage o = _orders[orderId];
         _requireStatus(orderId, o, Status.Verified);
-        if (msg.sender != o.verifier && msg.sender != o.payee) revert NotReleaser(orderId, msg.sender);
-
-        o.status = Status.Released;
-        _recordFulfillment(orderId, o, true, o.deliveredAt <= o.deliverBy);
-        // forge-lint: disable-next-line(reentrancy-events)
-        emit OrderReleased(orderId, o.payee, o.amount);
-
-        paymentToken.safeTransfer(o.payee, o.amount);
+        uint64 deadline = o.verifiedAt + o.reviewWindow;
+        if (block.timestamp <= deadline) revert ReviewWindowOpen(orderId, deadline);
+        _release(orderId, o, false);
     }
 
-    /// @notice Delivery does not meet the spec: refund the buyer and record `passed = false` feedback.
-    function fail(uint256 orderId, bytes32 reportHash, string calldata reportURI) external nonReentrant {
-        Order storage o = _orders[orderId];
-        _requireVerifiable(orderId, o);
-
-        o.status = Status.Refunded;
-        o.reportHash = reportHash;
-        _recordFulfillment(orderId, o, false, o.deliveredAt <= o.deliverBy);
-        // forge-lint: disable-next-line(reentrancy-events)
-        emit OrderRefunded(orderId, o.buyer, o.amount, RefundReason.Failed, reportHash, reportURI);
-
-        paymentToken.safeTransfer(o.buyer, o.amount);
-    }
-
-    // ---------------------------------------------------------------------
-    // Anyone
-    // ---------------------------------------------------------------------
-
-    /// @notice Timeout refund to the buyer.
-    ///         - Funded past `deliverBy`: the seller agreed but never delivered -> `passed = false,
-    ///           on_time = false` feedback.
-    ///         - Delivered past the verify window: the verifier never ruled -> no feedback, since the
-    ///           seller is not at fault.
+    /// @notice Timeout refund to the buyer:
+    ///         - Funded past `deliverBy`: the expert never delivered (expert feedback: failed, late).
+    ///         - Delivered past the review window: the verifier never ruled (no expert feedback, since
+    ///           the expert is not at fault).
     function refundExpired(uint256 orderId) external nonReentrant {
         Order storage o = _orders[orderId];
-        RefundReason reason;
         if (o.status == Status.Funded && block.timestamp > o.deliverBy) {
-            reason = RefundReason.NotDelivered;
-        } else if (o.status == Status.Delivered && block.timestamp > _verifyDeadline(o)) {
-            reason = RefundReason.NotVerified;
+            _refund(orderId, o, RefundReason.NotDelivered);
+        } else if (o.status == Status.Delivered && block.timestamp > o.deliveredAt + o.reviewWindow) {
+            _refund(orderId, o, RefundReason.NotVerified);
         } else {
             revert NotRefundable(orderId);
         }
-
-        o.status = Status.Refunded;
-        if (reason == RefundReason.NotDelivered) _recordFulfillment(orderId, o, false, false);
-        // forge-lint: disable-next-line(reentrancy-events)
-        emit OrderRefunded(orderId, o.buyer, o.amount, reason, bytes32(0), "");
-
-        paymentToken.safeTransfer(o.buyer, o.amount);
     }
 
     // ---------------------------------------------------------------------
@@ -247,16 +240,23 @@ contract TaskEscrow is ITaskEscrow, ReentrancyGuard {
         return _orders[orderId];
     }
 
-    /// @notice Last timestamp at which the verifier may act; 0 until delivered.
-    function verifyDeadline(uint256 orderId) external view returns (uint64) {
+    /// @notice End of the current review window: the verifier's (Delivered) or the buyer's (Verified).
+    ///         0 in any other state.
+    function reviewDeadline(uint256 orderId) public view returns (uint64) {
         Order storage o = _orders[orderId];
-        return o.deliveredAt == 0 ? 0 : _verifyDeadline(o);
+        if (o.status == Status.Delivered) return o.deliveredAt + o.reviewWindow;
+        if (o.status == Status.Verified) return o.verifiedAt + o.reviewWindow;
+        return 0;
     }
 
     function isRefundable(uint256 orderId) external view returns (bool) {
         Order storage o = _orders[orderId];
         return (o.status == Status.Funded && block.timestamp > o.deliverBy)
-            || (o.status == Status.Delivered && block.timestamp > _verifyDeadline(o));
+            || (o.status == Status.Delivered && block.timestamp > reviewDeadline(orderId));
+    }
+
+    function isReleasable(uint256 orderId) external view returns (bool) {
+        return _orders[orderId].status == Status.Verified && block.timestamp > reviewDeadline(orderId);
     }
 
     /// @notice Hash helper so on-chain and off-chain code agree on the spec commitment.
@@ -264,98 +264,150 @@ contract TaskEscrow is ITaskEscrow, ReentrancyGuard {
         return keccak256(canonicalSpecJson);
     }
 
-    /// @notice The ERC-8004 feedback file this escrow would publish for `orderId` with the given outcome.
-    function previewFeedback(uint256 orderId, bool passed, bool onTime) external view returns (string memory json) {
+    /// @notice The ERC-8004 feedback file this escrow would publish right now for `orderId`.
+    function previewFeedback(uint256 orderId, Role role, bool passed, bool onTime, bool released)
+        external
+        view
+        returns (string memory json)
+    {
         Order storage o = _orders[orderId];
-        _requireExists(orderId, o);
-        return FulfillmentFeedback.toJson(_feedbackData(orderId, o, passed, onTime));
+        if (o.status == Status.None) revert InvalidStatus(orderId, Status.None, Status.Created);
+        uint256 agentId = role == Role.Expert ? o.sellerAgentId : o.buyerAgentId;
+        return FulfillmentFeedback.toJson(_feedbackData(orderId, o, agentId, role, passed, onTime, released));
     }
 
     // ---------------------------------------------------------------------
-    // Internals
+    // Internals: transitions
     // ---------------------------------------------------------------------
 
-    function _verifyDeadline(Order storage o) private view returns (uint64) {
-        return o.deliveredAt + o.verifyWindow;
-    }
-
-    function _requireVerifiable(uint256 orderId, Order storage o) private view {
+    function _recordVerdict(
+        uint256 orderId,
+        Order storage o,
+        bool passed,
+        bytes32 resultHash,
+        string calldata resultURI
+    ) private {
         _requireStatus(orderId, o, Status.Delivered);
         if (msg.sender != o.verifier) revert NotVerifier(orderId, msg.sender);
-        uint64 deadline = _verifyDeadline(o);
-        if (block.timestamp > deadline) revert VerificationWindowClosed(orderId, deadline);
+        uint64 deadline = o.deliveredAt + o.reviewWindow;
+        if (block.timestamp > deadline) revert ReviewWindowClosed(orderId, deadline);
+        if (resultHash == bytes32(0)) revert ZeroHash();
+
+        o.status = Status.Verified;
+        o.passed = passed;
+        // forge-lint: disable-next-line(unsafe-typecast)
+        o.verifiedAt = uint64(block.timestamp);
+        o.resultHash = resultHash;
+        emit OrderVerified(orderId, msg.sender, passed, resultHash, resultURI);
     }
 
-    function _requireStatus(uint256 orderId, Order storage o, Status expected) private view {
-        if (o.status != expected) revert InvalidStatus(orderId, o.status, expected);
+    function _release(uint256 orderId, Order storage o, bool buyerOnTime) private {
+        o.status = Status.Released;
+        _recordFulfillment(orderId, o, Role.Expert, true, o.deliveredAt <= o.deliverBy, true);
+        _recordFulfillment(orderId, o, Role.Buyer, true, buyerOnTime, true);
+        // forge-lint: disable-next-line(reentrancy-events)
+        emit OrderReleased(orderId, o.payee, o.amount, msg.sender);
+
+        paymentToken.safeTransfer(o.payee, o.amount);
     }
 
-    function _requireExists(uint256 orderId, Order storage o) private view {
-        if (o.status == Status.None) revert InvalidStatus(orderId, Status.None, Status.Created);
+    function _refund(uint256 orderId, Order storage o, RefundReason reason) private {
+        o.status = Status.Refunded;
+        if (reason == RefundReason.Failed) {
+            _recordFulfillment(orderId, o, Role.Expert, false, o.deliveredAt <= o.deliverBy, false);
+        } else if (reason == RefundReason.NotDelivered) {
+            _recordFulfillment(orderId, o, Role.Expert, false, false, false);
+        }
+        _recordFulfillment(orderId, o, Role.Buyer, true, true, false);
+        // forge-lint: disable-next-line(reentrancy-events)
+        emit OrderRefunded(orderId, o.buyer, o.amount, reason);
+
+        paymentToken.safeTransfer(o.buyer, o.amount);
     }
 
-    function _isSeller(Order storage o, address account) private view returns (bool) {
-        if (account == o.payee) return true;
-        IERC721 identity = IERC721(address(identityRegistry));
-        address owner = identity.ownerOf(o.sellerAgentId);
-        return account == owner || identity.isApprovedForAll(owner, account)
-            || identity.getApproved(o.sellerAgentId) == account;
-    }
+    // ---------------------------------------------------------------------
+    // Internals: reputation
+    // ---------------------------------------------------------------------
 
-    function _feedbackData(uint256 orderId, Order storage o, bool passed, bool onTime)
+    /// @dev Writes ERC-8004 feedback with value = passed ? 100 : 0, tag1 = role ("expert" | "buyer"),
+    ///      tag2 = task_type, and feedbackURI = on-chain JSON (data URI) carrying task_type, amount,
+    ///      passed and on_time. Reputation must never block settlement (e.g. if an agent approves this
+    ///      contract as an operator, ERC-8004 forbids it from leaving feedback), so failures are caught
+    ///      and emitted. The registry is immutable and set at deployment, and every caller holds
+    ///      `nonReentrant`.
+    function _recordFulfillment(uint256 orderId, Order storage o, Role role, bool passed, bool onTime, bool released)
         private
-        view
-        returns (FulfillmentFeedback.Data memory)
     {
+        uint256 agentId = role == Role.Expert ? o.sellerAgentId : o.buyerAgentId;
+        if (agentId == 0) return;
+
+        FulfillmentFeedback.Data memory data = _feedbackData(orderId, o, agentId, role, passed, onTime, released);
+        string memory json = FulfillmentFeedback.toJson(data);
+        bytes32 feedbackHash = keccak256(bytes(json));
+
+        // forge-lint: disable-next-item(reentrancy-no-eth)
+        try reputationRegistry.giveFeedback(
+            agentId, data.value, 0, data.role, o.taskType, "", FulfillmentFeedback.toDataURI(json), feedbackHash
+        ) {
+            // forge-lint: disable-next-line(reentrancy-no-eth)
+            uint64 feedbackIndex = reputationRegistry.getLastIndex(agentId, address(this));
+            if (role == Role.Expert) o.sellerFeedbackIndex = feedbackIndex;
+            else o.buyerFeedbackIndex = feedbackIndex;
+            // forge-lint: disable-next-line(reentrancy-events)
+            emit FulfillmentRecorded(orderId, agentId, role, feedbackIndex, passed, onTime, feedbackHash);
+        } catch (bytes memory reason) {
+            // forge-lint: disable-next-line(reentrancy-events)
+            emit ReputationWriteFailed(orderId, agentId, role, reason);
+        }
+    }
+
+    function _feedbackData(
+        uint256 orderId,
+        Order storage o,
+        uint256 agentId,
+        Role role,
+        bool passed,
+        bool onTime,
+        bool released
+    ) private view returns (FulfillmentFeedback.Data memory) {
         return FulfillmentFeedback.Data({
             chainId: block.chainid,
             identityRegistry: address(identityRegistry),
-            agentId: o.sellerAgentId,
+            agentId: agentId,
             clientAddress: address(this),
             createdAt: block.timestamp,
             value: passed ? PASSED_VALUE : FAILED_VALUE,
+            role: role == Role.Expert ? "expert" : "buyer",
             taskType: o.taskType,
-            onTime: onTime,
+            outcome: released ? "released" : "refunded",
             passed: passed,
+            onTime: onTime,
             orderId: orderId,
             token: address(paymentToken),
             amount: o.amount,
             specHash: o.specHash,
             deliveryHash: o.deliveryHash,
-            reportHash: o.reportHash
+            resultHash: o.resultHash
         });
     }
 
-    /// @dev Writes ERC-8004 feedback: value = passed ? 100 : 0, tag1 = task_type, tag2 = on_time|late,
-    ///      feedbackURI = on-chain JSON (data URI) carrying task_type, amount, passed, on_time.
-    ///      Reputation must never block settlement (e.g. if the seller approves this contract as an
-    ///      operator, ERC-8004 forbids it from leaving feedback), so failures are caught and emitted.
-    ///      The registry is immutable and set at deployment, and every caller holds `nonReentrant`.
-    function _recordFulfillment(uint256 orderId, Order storage o, bool passed, bool onTime) private {
-        FulfillmentFeedback.Data memory data = _feedbackData(orderId, o, passed, onTime);
-        string memory json = FulfillmentFeedback.toJson(data);
-        bytes32 feedbackHash = keccak256(bytes(json));
-        uint256 agentId = o.sellerAgentId;
+    // ---------------------------------------------------------------------
+    // Internals: access
+    // ---------------------------------------------------------------------
 
-        // forge-lint: disable-next-item(reentrancy-no-eth)
-        try reputationRegistry.giveFeedback(
-            agentId,
-            data.value,
-            0,
-            o.taskType,
-            FulfillmentFeedback.onTimeTag(onTime),
-            "",
-            FulfillmentFeedback.toDataURI(json),
-            feedbackHash
-        ) {
-            // forge-lint: disable-next-line(reentrancy-no-eth)
-            uint64 feedbackIndex = reputationRegistry.getLastIndex(agentId, address(this));
-            o.feedbackIndex = feedbackIndex;
-            // forge-lint: disable-next-line(reentrancy-events)
-            emit FulfillmentRecorded(orderId, agentId, feedbackIndex, passed, onTime, feedbackHash);
-        } catch (bytes memory reason) {
-            // forge-lint: disable-next-line(reentrancy-events)
-            emit ReputationWriteFailed(orderId, agentId, reason);
-        }
+    function _requireStatus(uint256 orderId, Order storage o, Status expected) private view {
+        if (o.status != expected) revert InvalidStatus(orderId, o.status, expected);
+    }
+
+    function _isSeller(Order storage o, address account) private view returns (bool) {
+        return account == o.payee || _controlsAgent(o.sellerAgentId, account);
+    }
+
+    /// @dev Agent wallet, owner, or an ERC-721 approved operator of `agentId`.
+    function _controlsAgent(uint256 agentId, address account) private view returns (bool) {
+        if (account == identityRegistry.getAgentWallet(agentId)) return true;
+        IERC721 identity = IERC721(address(identityRegistry));
+        address owner = identity.ownerOf(agentId);
+        return account == owner || identity.isApprovedForAll(owner, account) || identity.getApproved(agentId) == account;
     }
 }

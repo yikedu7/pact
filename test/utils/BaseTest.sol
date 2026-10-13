@@ -23,23 +23,26 @@ abstract contract BaseTest is Test {
     address internal sellerOwner;
     uint256 internal sellerOwnerKey;
     uint256 internal sellerAgentId;
+    uint256 internal buyerAgentId;
 
-    uint256 internal constant PRICE = 25e6; // 25 mUSDC
+    uint256 internal constant PRICE = 5e6; // 5 mUSDC, as in the PRODUCT_SPEC demo
     uint256 internal constant BUYER_BALANCE = 1_000e6;
-    uint32 internal constant VERIFY_WINDOW = 1 hours;
+    uint32 internal constant REVIEW_WINDOW = 1 hours;
     uint256 internal constant START_TIME = 1_700_000_000; // 2023-11-14T22:13:20Z
 
-    /// @dev Canonical (RFC 8785 / JCS) form of the sample spec in docs/ARCHITECTURE.md.
-    string internal constant SPEC_JSON = '{"acceptance":[{"id":"len","rule":"max_words","value":200},{"id":"lang","rule":"language","value":"en"}],'
-        '"deliverable":{"format":"text/markdown"},"input":{"uri":"ipfs://bafyinput"},"task_type":"summarize",'
-        '"version":"1"}';
+    /// @dev RFC 8785 (JCS) canonical form of the PRODUCT_SPEC criteria template for the logo demo.
+    string internal constant SPEC_JSON = unicode'{"acceptance_criteria":[{"check":"file_format == png && size >= 1024",'
+        unicode'"id":"c1","type":"auto"},{"check":"包含文字 \'Guild\'，风格简洁","id":"c2","type":"llm"}],'
+        unicode'"approval_mode":"user","deadline":"2023-11-15T22:13:20Z","deliverables":[{"count":3,'
+        unicode'"kind":"image/png","min_size":"1024x1024"}],"price":{"amount":"5","token":"USDC"},"revisions":1,'
+        unicode'"task_type":"design.logo","title":"Guild logo"}';
     bytes32 internal SPEC_HASH = keccak256(bytes(SPEC_JSON));
     string internal constant SPEC_URI = "ipfs://bafyspec";
-    string internal constant TASK_TYPE = "summarize";
+    string internal constant TASK_TYPE = "design.logo";
     bytes32 internal constant DELIVERY_HASH = keccak256("delivery-manifest");
     string internal constant DELIVERY_URI = "ipfs://bafydelivery";
-    bytes32 internal constant REPORT_HASH = keccak256("verification-report");
-    string internal constant REPORT_URI = "ipfs://bafyreport";
+    bytes32 internal constant RESULT_HASH = keccak256("verification-result");
+    string internal constant RESULT_URI = "ipfs://bafyresult";
 
     uint64 internal deliverBy;
 
@@ -49,53 +52,88 @@ abstract contract BaseTest is Test {
         identity = new IdentityRegistry();
         reputation = new ReputationRegistry(address(identity));
         escrow = new TaskEscrow(
-            IERC20(address(usdc)), IIdentityRegistry(address(identity)), IReputationRegistry(address(reputation))
+            IERC20(address(usdc)),
+            IIdentityRegistry(address(identity)),
+            IReputationRegistry(address(reputation)),
+            verifier
         );
 
         (sellerOwner, sellerOwnerKey) = makeAddrAndKey("sellerOwner");
         vm.prank(sellerOwner);
-        sellerAgentId = identity.register("ipfs://seller-agent.json");
+        sellerAgentId = identity.register("ipfs://expert-agent.json");
+        vm.prank(buyer);
+        buyerAgentId = identity.register("ipfs://buyer-agent.json");
 
         usdc.mint(buyer, BUYER_BALANCE);
         vm.prank(buyer);
         usdc.approve(address(escrow), type(uint256).max);
 
-        deliverBy = uint64(vm.getBlockTimestamp() + 1 days);
+        deliverBy = uint64(vm.getBlockTimestamp() + 24 hours);
     }
 
     // ---------------------------------------------------------------------
     // Lifecycle helpers
     // ---------------------------------------------------------------------
 
-    function _create() internal returns (uint256 orderId) {
+    function _params() internal view returns (ITaskEscrow.OrderParams memory) {
+        return ITaskEscrow.OrderParams({
+            sellerAgentId: sellerAgentId,
+            buyerAgentId: buyerAgentId,
+            verifier: address(0),
+            amount: PRICE,
+            specHash: SPEC_HASH,
+            specURI: SPEC_URI,
+            taskType: TASK_TYPE,
+            deliverBy: deliverBy,
+            reviewWindow: REVIEW_WINDOW,
+            approvalMode: ITaskEscrow.ApprovalMode.User
+        });
+    }
+
+    function _create(ITaskEscrow.OrderParams memory p) internal returns (uint256 orderId) {
         vm.prank(buyer);
-        orderId = escrow.createOrder(
-            sellerAgentId, verifier, PRICE, SPEC_HASH, SPEC_URI, TASK_TYPE, deliverBy, VERIFY_WINDOW
-        );
+        orderId = escrow.createOrder(p);
     }
 
-    function _agreed() internal returns (uint256 orderId) {
-        orderId = _create();
+    function _create() internal returns (uint256) {
+        return _create(_params());
+    }
+
+    function _agreed(ITaskEscrow.OrderParams memory p) internal returns (uint256 orderId) {
+        orderId = _create(p);
         vm.prank(sellerOwner);
-        escrow.agree(orderId);
+        escrow.agree(orderId, p.specHash);
     }
 
-    function _funded() internal returns (uint256 orderId) {
-        orderId = _agreed();
+    function _funded(ITaskEscrow.OrderParams memory p) internal returns (uint256 orderId) {
+        orderId = _agreed(p);
         vm.prank(buyer);
         escrow.fund(orderId);
     }
 
-    function _delivered() internal returns (uint256 orderId) {
-        orderId = _funded();
+    function _delivered(ITaskEscrow.OrderParams memory p) internal returns (uint256 orderId) {
+        orderId = _funded(p);
         vm.prank(sellerOwner);
         escrow.submitDelivery(orderId, DELIVERY_HASH, DELIVERY_URI);
     }
 
-    function _verified() internal returns (uint256 orderId) {
+    function _agreed() internal returns (uint256) {
+        return _agreed(_params());
+    }
+
+    function _funded() internal returns (uint256) {
+        return _funded(_params());
+    }
+
+    function _delivered() internal returns (uint256) {
+        return _delivered(_params());
+    }
+
+    /// @dev User approval mode: verifier passed, awaiting the buyer's approval.
+    function _passed() internal returns (uint256 orderId) {
         orderId = _delivered();
         vm.prank(verifier);
-        escrow.verify(orderId, REPORT_HASH, REPORT_URI);
+        escrow.release(orderId, RESULT_HASH, RESULT_URI);
     }
 
     function _status(uint256 orderId) internal view returns (ITaskEscrow.Status) {
@@ -105,6 +143,14 @@ abstract contract BaseTest is Test {
     function _clients() internal view returns (address[] memory clients) {
         clients = new address[](1);
         clients[0] = address(escrow);
+    }
+
+    function _feedback(uint256 agentId, uint64 index)
+        internal
+        view
+        returns (int128 value, string memory tag1, string memory tag2)
+    {
+        (value,, tag1, tag2,) = reputation.readFeedback(agentId, address(escrow), index);
     }
 
     function _signAgentWallet(uint256 walletKey, uint256 agentId, address wallet, address owner, uint256 deadline)

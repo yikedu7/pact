@@ -19,6 +19,7 @@ contract DeployTest is Test {
         vm.setEnv("IDENTITY_REGISTRY", vm.toString(address(0)));
         vm.setEnv("REPUTATION_REGISTRY", vm.toString(address(0)));
         vm.setEnv("MOCK_USDC_MINT", "0");
+        vm.setEnv("DEFAULT_VERIFIER", vm.toString(makeAddr("verifierBot")));
     }
 
     function test_deploy_freshStackWithMockUsdc() public {
@@ -37,6 +38,8 @@ contract DeployTest is Test {
         assertEq(address(escrow.paymentToken()), d.paymentToken);
         assertEq(address(escrow.identityRegistry()), d.identityRegistry);
         assertEq(address(escrow.reputationRegistry()), d.reputationRegistry);
+        assertEq(escrow.defaultVerifier(), makeAddr("verifierBot"));
+        assertEq(d.defaultVerifier, makeAddr("verifierBot"));
     }
 
     function test_deploy_reusesExistingTokenAndRegistries() public {

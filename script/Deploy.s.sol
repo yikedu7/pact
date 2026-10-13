@@ -17,6 +17,7 @@ import {Script, console2} from "forge-std/Script.sol";
 ///         PAYMENT_TOKEN         optional ERC-20; when unset a MockUSDC is deployed
 ///         IDENTITY_REGISTRY     optional existing ERC-8004 identity registry to reuse
 ///         REPUTATION_REGISTRY   optional existing reputation registry (requires IDENTITY_REGISTRY)
+///         DEFAULT_VERIFIER      protocol verifier bot address (defaults to the deployer)
 ///         MOCK_USDC_MINT        optional amount (6 decimals) to mint when MockUSDC is deployed
 ///         MOCK_USDC_MINT_TO     optional recipient of that mint (defaults to the deployer)
 ///         WRITE_DEPLOYMENT      default true; writes deployments/<chainId>.json
@@ -31,6 +32,7 @@ contract Deploy is Script {
         address identityRegistry;
         address reputationRegistry;
         address taskEscrow;
+        address defaultVerifier;
         bool mockPaymentToken;
         uint256 startBlock;
     }
@@ -48,6 +50,7 @@ contract Deploy is Script {
 
         uint256 privateKey = vm.envOr("PRIVATE_KEY", uint256(0));
         d.deployer = privateKey == 0 ? msg.sender : vm.addr(privateKey);
+        d.defaultVerifier = vm.envOr("DEFAULT_VERIFIER", d.deployer);
         d.startBlock = block.number;
 
         if (privateKey == 0) vm.startBroadcast();
@@ -68,7 +71,10 @@ contract Deploy is Script {
         }
         d.taskEscrow = address(
             new TaskEscrow(
-                IERC20(d.paymentToken), IIdentityRegistry(d.identityRegistry), IReputationRegistry(d.reputationRegistry)
+                IERC20(d.paymentToken),
+                IIdentityRegistry(d.identityRegistry),
+                IReputationRegistry(d.reputationRegistry),
+                d.defaultVerifier
             )
         );
 
@@ -89,6 +95,8 @@ contract Deploy is Script {
         console2.log("identityRegistry   ", d.identityRegistry);
         console2.log("reputationRegistry ", d.reputationRegistry);
         console2.log("taskEscrow         ", d.taskEscrow);
+        console2.log("defaultVerifier    ", d.defaultVerifier);
+        if (d.defaultVerifier == d.deployer) console2.log("WARNING: DEFAULT_VERIFIER unset, using the deployer");
     }
 
     function _write(Deployment memory d) internal {
@@ -100,6 +108,7 @@ contract Deploy is Script {
         vm.serializeBool(key, "mockPaymentToken", d.mockPaymentToken);
         vm.serializeAddress(key, "identityRegistry", d.identityRegistry);
         vm.serializeAddress(key, "reputationRegistry", d.reputationRegistry);
+        vm.serializeAddress(key, "defaultVerifier", d.defaultVerifier);
         string memory json = vm.serializeAddress(key, "taskEscrow", d.taskEscrow);
 
         string memory path = string.concat(vm.projectRoot(), "/deployments/", vm.toString(block.chainid), ".json");

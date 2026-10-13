@@ -7,7 +7,7 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 /// @title FulfillmentFeedback
 /// @notice Builds the ERC-8004 off-chain feedback file for an escrow outcome entirely on-chain, so the
 ///         fields the product relies on (task_type, amount, passed, on_time) are computed by the escrow
-///         rather than asserted by the verifier. The file is published as a base64 `data:` URI and its
+///         rather than asserted by any party. The file is published as a base64 `data:` URI and its
 ///         keccak256 is used as `feedbackHash`.
 library FulfillmentFeedback {
     using Strings for uint256;
@@ -22,23 +22,21 @@ library FulfillmentFeedback {
         address clientAddress;
         uint256 createdAt;
         int128 value;
+        string role;
         string taskType;
-        bool onTime;
+        string outcome;
         bool passed;
+        bool onTime;
         uint256 orderId;
         address token;
         uint256 amount;
         bytes32 specHash;
         bytes32 deliveryHash;
-        bytes32 reportHash;
+        bytes32 resultHash;
     }
 
-    function onTimeTag(bool onTime) internal pure returns (string memory) {
-        return onTime ? "on_time" : "late";
-    }
-
-    /// @notice task_type is reused as ERC-8004 `tag1` and embedded unescaped in JSON, so it is
-    ///         restricted to 1-32 chars of `[a-z0-9_.-]`.
+    /// @notice task_type is reused as ERC-8004 `tag2` and embedded unescaped in JSON, so it is
+    ///         restricted to 1-32 chars of `[a-z0-9_.-]` (e.g. `design.logo`).
     function isValidTaskType(string memory taskType) internal pure returns (bool) {
         bytes memory b = bytes(taskType);
         if (b.length == 0 || b.length > MAX_TASK_TYPE_LENGTH) return false;
@@ -66,13 +64,15 @@ library FulfillmentFeedback {
             '","value":',
             Strings.toStringSigned(d.value),
             ',"valueDecimals":0,"tag1":"',
-            d.taskType,
+            d.role,
             '","tag2":"',
-            onTimeTag(d.onTime),
+            d.taskType,
             '"'
         );
         string memory body = string.concat(
-            ',"task_type":"',
+            ',"role":"',
+            d.role,
+            '","task_type":"',
             d.taskType,
             '","amount":"',
             d.amount.toString(),
@@ -82,7 +82,9 @@ library FulfillmentFeedback {
             d.passed ? "true" : "false",
             ',"on_time":',
             d.onTime ? "true" : "false",
-            ',"orderId":"',
+            ',"outcome":"',
+            d.outcome,
+            '","orderId":"',
             d.orderId.toString(),
             '"'
         );
@@ -91,8 +93,8 @@ library FulfillmentFeedback {
             uint256(d.specHash).toHexString(32),
             '","deliveryHash":"',
             uint256(d.deliveryHash).toHexString(32),
-            '","reportHash":"',
-            uint256(d.reportHash).toHexString(32),
+            '","resultHash":"',
+            uint256(d.resultHash).toHexString(32),
             '"}'
         );
         return string.concat(head, body, hashes);
