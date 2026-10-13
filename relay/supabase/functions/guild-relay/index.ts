@@ -121,8 +121,8 @@ Deno.serve(async (req: Request) => {
     return json(400, { error: "body must be a JSON object" });
   }
   const proto = (envelope as { protocol?: string }).protocol;
-  if (proto !== "guild.negotiate/v0.1") {
-    return json(400, { error: "protocol must be guild.negotiate/v0.1" });
+  if (proto !== "guild.negotiate/v0.1" && proto !== "guild.escrow/v0.1") {
+    return json(400, { error: "protocol must be guild.negotiate/v0.1 or guild.escrow/v0.1" });
   }
 
   const { data: bot, error: botErr } = await supabase

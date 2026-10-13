@@ -10,15 +10,16 @@ import {ReputationRegistry} from "../contracts/registries/ReputationRegistry.sol
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {Script, console2} from "forge-std/Script.sol";
 
-/// @notice Runs the PRODUCT_SPEC demo order ("Guild logo, 5 USDC, 24h") against the escrow recorded in
-///         `deployments/<chainId>.json`, broadcasting each step from the acting party's key so every
-///         transition has its own transaction hash. Stands in for the TypeScript agents (next PR).
+/// @notice Optional local Foundry replay of the two-wallet demo ("Guild logo, 5 USDC, 24h").
+///         Not the Path A critical path. Path A is the split TypeScript commands, one wallet per process.
+///         This script signs createOrder, fund, and release/fail with the buyer key, and agree plus
+///         submitDelivery with the expert key. `createOrder.verifier` is the buyer address.
 ///
-///         BUYER_PRIVATE_KEY / EXPERT_PRIVATE_KEY / VERIFIER_PRIVATE_KEY
-///                         default to anvil accounts 1-3 on chain 31337, required elsewhere
+///         BUYER_PRIVATE_KEY / EXPERT_PRIVATE_KEY
+///                         default to anvil accounts 1–2 on chain 31337, required elsewhere
 ///         SCENARIO        pass (default) | fail | timeout (stops once Funded; refundExpired after deliverBy)
 ///         APPROVAL_MODE   user (default) | approve_for_me
-///         EXPERT_AGENT_ID / BUYER_AGENT_ID / VERIFIER_AGENT_ID   reuse agents registered by an earlier run
+///         EXPERT_AGENT_ID / BUYER_AGENT_ID   reuse agents registered by an earlier run
 contract Demo is Script {
     uint256 public constant PRICE = 5e6;
     uint32 public constant REVIEW_WINDOW = 1 hours;
@@ -26,7 +27,6 @@ contract Demo is Script {
 
     uint256 internal constant ANVIL_KEY_1 = 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d;
     uint256 internal constant ANVIL_KEY_2 = 0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a;
-    uint256 internal constant ANVIL_KEY_3 = 0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6;
 
     /// @dev RFC 8785 canonical form of the PRODUCT_SPEC criteria template, split around the two values the
     ///      run fills in (`approval_mode`, `deadline`); keys are sorted, so the pieces concatenate in order.
@@ -53,19 +53,16 @@ contract Demo is Script {
     struct Config {
         uint256 buyerKey;
         uint256 expertKey;
-        uint256 verifierKey;
         Scenario scenario;
         bool approveForMe;
         uint256 expertAgentId;
         uint256 buyerAgentId;
-        uint256 verifierAgentId;
     }
 
     struct Result {
         uint256 orderId;
         uint256 expertAgentId;
         uint256 buyerAgentId;
-        uint256 verifierAgentId;
         ITaskEscrow.Status status;
     }
 
@@ -82,7 +79,6 @@ contract Demo is Script {
         bool anvil = block.chainid == 31337;
         c.buyerKey = anvil ? vm.envOr("BUYER_PRIVATE_KEY", ANVIL_KEY_1) : vm.envUint("BUYER_PRIVATE_KEY");
         c.expertKey = anvil ? vm.envOr("EXPERT_PRIVATE_KEY", ANVIL_KEY_2) : vm.envUint("EXPERT_PRIVATE_KEY");
-        c.verifierKey = anvil ? vm.envOr("VERIFIER_PRIVATE_KEY", ANVIL_KEY_3) : vm.envUint("VERIFIER_PRIVATE_KEY");
         bytes32 scenario = keccak256(bytes(vm.envOr("SCENARIO", string("pass"))));
         if (scenario == keccak256("pass")) c.scenario = Scenario.Pass;
         else if (scenario == keccak256("fail")) c.scenario = Scenario.Fail;
@@ -91,7 +87,6 @@ contract Demo is Script {
         c.approveForMe = keccak256(bytes(vm.envOr("APPROVAL_MODE", string("user")))) == keccak256("approve_for_me");
         c.expertAgentId = vm.envOr("EXPERT_AGENT_ID", uint256(0));
         c.buyerAgentId = vm.envOr("BUYER_AGENT_ID", uint256(0));
-        c.verifierAgentId = vm.envOr("VERIFIER_AGENT_ID", uint256(0));
     }
 
     function execute(TaskEscrow escrow, Config memory c) public returns (Result memory r) {
@@ -112,12 +107,6 @@ contract Demo is Script {
             vm.broadcast(c.buyerKey);
             r.buyerAgentId = identity.register("ipfs://guild-buyer-agent.json");
         }
-        r.verifierAgentId = c.verifierAgentId;
-        if (r.verifierAgentId == 0) {
-            vm.broadcast(c.verifierKey);
-            r.verifierAgentId = identity.register("ipfs://guild-verifier-bot.json");
-        }
-
         uint64 deliverBy = uint64(vm.getBlockTimestamp() + 24 hours);
         string memory specJson = specJsonFor(c.approveForMe, deliverBy);
         bytes32 specHash = keccak256(bytes(specJson));
@@ -129,7 +118,7 @@ contract Demo is Script {
             ITaskEscrow.OrderParams({
                 sellerAgentId: r.expertAgentId,
                 buyerAgentId: r.buyerAgentId,
-                verifier: vm.addr(c.verifierKey),
+                verifier: buyer,
                 amount: PRICE,
                 specHash: specHash,
                 specURI: _dataURI(specJson),
@@ -154,7 +143,7 @@ contract Demo is Script {
 
         bool pass = c.scenario == Scenario.Pass;
         string memory result = pass ? RESULT_PASS : RESULT_FAIL;
-        vm.startBroadcast(c.verifierKey);
+        vm.startBroadcast(c.buyerKey);
         if (pass) escrow.release(r.orderId, keccak256(bytes(result)), _dataURI(result));
         else escrow.fail(r.orderId, keccak256(bytes(result)), _dataURI(result));
         vm.stopBroadcast();
@@ -193,7 +182,7 @@ contract Demo is Script {
         console2.log("status (3=Funded, 6=Released, 7=Refunded)", uint8(r.status));
         console2.log("expert agentId", r.expertAgentId);
         console2.log("buyer agentId", r.buyerAgentId);
-        console2.log("verifier agentId", r.verifierAgentId);
+        console2.log("verifier", escrow.getOrder(r.orderId).verifier);
         console2.log("expert payment token balance", escrow.paymentToken().balanceOf(expert));
         console2.log("expert design.logo feedback count (via escrow)", count);
         console2.log("expert design.logo pass rate %", uint256(int256(passRate)));

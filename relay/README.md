@@ -14,7 +14,8 @@ POST https://<project-ref>.supabase.co/functions/v1/guild-relay/<botId>
 ```
 
 - **No** `Authorization` header required on the public path (Free-tier anon key is not needed).
-- Body must be a `guild.negotiate/v0.1` envelope (see negotiation record in the demo folder).
+- Body must be a `guild.negotiate/v0.1` envelope or a `guild.escrow/v0.1` next-step cue
+  (see negotiation record in the demo folder, and the escrow commands in the repo README).
 - Rate limit: **30 requests / hour / client IP / bot** (see `guild_relay_rate_limits`).
 
 Admin registration (service operators only):

@@ -13,30 +13,34 @@ import type { Role, TxRequest, TxSender } from "./types.js";
 export interface PrivyConfig {
   appId: string;
   appSecret: string;
-  wallets: Record<Role, { walletId: string; address?: Address }>;
+  /** Only the wallets this process is allowed to sign with. */
+  wallets: Partial<Record<Role, { walletId: string; address?: Address }>>;
 }
 
-export function privyConfigFromEnv(): PrivyConfig | null {
-  const appId = process.env.PRIVY_APP_ID;
-  const appSecret = process.env.PRIVY_APP_SECRET;
-  if (!appId || !appSecret) return null;
+type Env = Record<string, string | undefined>;
 
-  const walletId = (role: Role) => {
-    const key = WALLET_ID_ENV[role];
-    const id = process.env[key];
-    if (!id) throw new Error(`Missing ${key} for Privy signing`);
-    const address = process.env[WALLET_ADDRESS_ENV[role]] as Address | undefined;
-    return { walletId: id, address };
-  };
-
+/**
+ * One role only. Does not read the other roles' wallet id env vars, so a buyer
+ * process cannot attach the expert or verifier wallet even if those vars exist.
+ */
+export function privyRoleConfigFromEnv(role: Role, env: Env = process.env): PrivyConfig {
+  const appId = env.PRIVY_APP_ID?.trim();
+  const appSecret = env.PRIVY_APP_SECRET?.trim();
+  if (!appId || !appSecret) {
+    throw new Error("PRIVY_APP_ID and PRIVY_APP_SECRET are required for Privy signing.");
+  }
+  const idKey = WALLET_ID_ENV[role];
+  const id = env[idKey]?.trim();
+  if (!id) {
+    throw new Error(
+      `This ${role} process signs only with ${idKey}. It is unset. Do not add another role's wallet id to this bot.`,
+    );
+  }
+  const address = env[WALLET_ADDRESS_ENV[role]]?.trim() as Address | undefined;
   return {
     appId,
     appSecret,
-    wallets: {
-      buyer: walletId("buyer"),
-      expert: walletId("expert"),
-      verifier: walletId("verifier"),
-    },
+    wallets: { [role]: { walletId: id, address } },
   };
 }
 
@@ -47,7 +51,13 @@ export async function privySendTransaction(
   chain: ChainConfig,
   publicClient: PublicClient,
 ): Promise<Hex> {
-  const { walletId, address: expectedAddress } = cfg.wallets[role];
+  const wallet = cfg.wallets[role];
+  if (!wallet) {
+    throw new Error(
+      `This process is not configured to sign as ${role}. It will not call Privy with another role's wallet id.`,
+    );
+  }
+  const { walletId, address: expectedAddress } = wallet;
   const from = expectedAddress;
   if (!from) {
     throw new Error(
@@ -106,7 +116,7 @@ export function createPrivySender(
   const publicClient = createPublicClient({
     transport: http(chain.rpcUrl),
   });
-  const address = cfg.wallets[role].address;
+  const address = cfg.wallets[role]?.address;
   if (!address) {
     throw new Error(`PRIVY_WALLET_${role.toUpperCase()}_ADDRESS is required`);
   }

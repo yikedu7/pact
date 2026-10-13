@@ -19,6 +19,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 ///         submitDelivery         expert    Funded    -> Delivered  (content hash + URI only)
 ///         release                verifier  Delivered -> Verified(pass) [-> Released if approve_for_me]
 ///         fail                   verifier  Delivered -> Verified(fail) -> Refunded
+///         Demo path: createOrder.verifier is the buyer, so the buyer signs release/fail.
 ///         approve                buyer     Verified  -> Released   (approval_mode = user)
 ///         releaseExpired         anyone    Verified  -> Released   (buyer silent past review window)
 ///         refundExpired          anyone    Funded    -> Refunded   (nothing delivered by deliverBy)
@@ -72,7 +73,9 @@ contract TaskEscrow is ITaskEscrow, ReentrancyGuard {
     /// @notice Proposes an order. Nothing is escrowed until the expert agrees and the buyer funds.
     /// @dev    `params.specHash` is keccak256 of the canonicalized (RFC 8785) delivery-criteria JSON.
     ///         `params.buyerAgentId` is optional (0 = unregistered buyer, no buyer-side feedback).
-    ///         `params.verifier` is optional (0 = `defaultVerifier`).
+    ///         `params.verifier` is who may `release` or `fail`. The demo path sets it to the buyer
+    ///         (`msg.sender`). Zero still means `defaultVerifier`. The expert payee and owner cannot
+    ///         be the verifier.
     function createOrder(OrderParams calldata params) external returns (uint256 orderId) {
         if (params.amount == 0) revert ZeroAmount();
         if (params.specHash == bytes32(0)) revert ZeroHash();
@@ -91,7 +94,9 @@ contract TaskEscrow is ITaskEscrow, ReentrancyGuard {
         ) revert InvalidBuyerAgent(params.buyerAgentId);
 
         address verifier = params.verifier == address(0) ? defaultVerifier : params.verifier;
-        if (verifier == msg.sender || verifier == payee || verifier == agentOwner) revert InvalidVerifier(verifier);
+        // Buyer-as-verifier is the demo path (task acceptance is buyer confirm).
+        // Expert payee / owner still cannot verify their own order.
+        if (verifier == payee || verifier == agentOwner) revert InvalidVerifier(verifier);
 
         orderId = nextOrderId++;
         Order storage o = _orders[orderId];

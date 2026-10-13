@@ -741,22 +741,35 @@ contract TaskEscrowTest is BaseTest {
 
     function test_createOrder_revertsOnInvalidVerifier() public {
         ITaskEscrow.OrderParams memory p = _params();
-        address[2] memory bad = [buyer, sellerOwner];
-        for (uint256 i; i < bad.length; ++i) {
-            p.verifier = bad[i];
-            vm.prank(buyer);
-            vm.expectRevert(abi.encodeWithSelector(ITaskEscrow.InvalidVerifier.selector, bad[i]));
-            escrow.createOrder(p);
-        }
+        p.verifier = sellerOwner;
+        vm.prank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(ITaskEscrow.InvalidVerifier.selector, sellerOwner));
+        escrow.createOrder(p);
     }
 
-    function test_createOrder_revertsWhenDefaultVerifierIsAParty() public {
+    /// Demo path: the buyer address is the order verifier and later signs release.
+    function test_createOrder_buyerIsVerifier() public {
+        ITaskEscrow.OrderParams memory p = _params();
+        p.verifier = buyer;
+        p.approvalMode = ITaskEscrow.ApprovalMode.ApproveForMe;
+        uint256 orderId = _delivered(p);
+        assertEq(escrow.getOrder(orderId).verifier, buyer);
+        assertEq(escrow.getOrder(orderId).buyer, buyer);
+
+        vm.prank(buyer);
+        escrow.release(orderId, RESULT_HASH, RESULT_URI);
+        assertEq(uint8(_status(orderId)), uint8(ITaskEscrow.Status.Released));
+        assertEq(usdc.balanceOf(sellerOwner), PRICE);
+    }
+
+    function test_createOrder_defaultVerifierAddressMayBuyAndVerify() public {
         usdc.mint(verifier, PRICE);
         ITaskEscrow.OrderParams memory p = _params();
         p.buyerAgentId = 0;
         vm.prank(verifier);
-        vm.expectRevert(abi.encodeWithSelector(ITaskEscrow.InvalidVerifier.selector, verifier));
-        escrow.createOrder(p);
+        uint256 orderId = escrow.createOrder(p);
+        assertEq(escrow.getOrder(orderId).buyer, verifier);
+        assertEq(escrow.getOrder(orderId).verifier, verifier);
     }
 
     function test_createOrder_revertsOnSelfDealing() public {

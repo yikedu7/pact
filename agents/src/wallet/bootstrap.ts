@@ -34,7 +34,7 @@ export type WalletSource = "env" | "file" | "created";
 export interface EnsureWalletsResult {
   config: PrivyConfig;
   created: Role[];
-  source: Record<Role, WalletSource>;
+  source: Partial<Record<Role, WalletSource>>;
 }
 
 interface StoredRole {
@@ -145,11 +145,13 @@ async function privyJson(
 export function formatWalletSecretLines(result: EnsureWalletsResult): string {
   const lines = [
     "Guild Privy server wallets are ready.",
-    "Save these as bot secrets (PRIVY_WALLET_*). Do not commit them.",
+    "Path A uses two wallets: give the buyer bot only the buyer id, and the expert bot only the expert id.",
+    "Do not commit them. PRIVY_WALLET_VERIFIER_* is not part of the demo.",
     "",
   ];
   for (const role of ROLES) {
     const w = result.config.wallets[role];
+    if (!w) continue;
     lines.push(`${WALLET_ID_ENV[role]}=${w.walletId}`);
     lines.push(`${WALLET_ADDRESS_ENV[role]}=${w.address ?? ""}`);
     lines.push(`# ${role}: ${result.source[role]}`);
@@ -159,15 +161,20 @@ export function formatWalletSecretLines(result: EnsureWalletsResult): string {
   return lines.join("\n");
 }
 
+/** Demo path wallets. Verifier is not included unless the caller opts in. */
+export const DEMO_ROLES: readonly Role[] = ["buyer", "expert"];
+
 /**
- * Resolve buyer/expert/verifier server wallets for the shared Guild Privy app.
- * Creates any role that has no id yet (`POST /v1/wallets`, chain_type ethereum).
+ * Resolve server wallets for the shared Guild Privy app.
+ * The demo path creates buyer and expert only (`POST /v1/wallets`, chain_type ethereum).
+ * Pass `roles` including `"verifier"` only for the optional non-demo wallet.
  * Returns null when `PRIVY_APP_ID` / `PRIVY_APP_SECRET` are unset (local keys).
  */
 export async function ensurePrivyRoleWallets(opts?: {
   env?: Env;
   fetchImpl?: typeof fetch;
   filePath?: string;
+  roles?: readonly Role[];
 }): Promise<EnsureWalletsResult | null> {
   const env = opts?.env ?? process.env;
   const appId = envValue(env, "PRIVY_APP_ID");
@@ -177,12 +184,13 @@ export async function ensurePrivyRoleWallets(opts?: {
   const fetchImpl = opts?.fetchImpl ?? fetch;
   const filePath = opts?.filePath ?? defaultRoleWalletsPath();
   const stored = readStore(filePath);
-  const wallets = {} as PrivyConfig["wallets"];
-  const source = {} as Record<Role, WalletSource>;
+  const roles = opts?.roles ?? DEMO_ROLES;
+  const wallets: PrivyConfig["wallets"] = {};
+  const source: Partial<Record<Role, WalletSource>> = {};
   const created: Role[] = [];
   let dirty = false;
 
-  for (const role of ROLES) {
+  for (const role of roles) {
     const envId = envValue(env, WALLET_ID_ENV[role]);
     const envAddress = envValue(env, WALLET_ADDRESS_ENV[role]);
     const fromFile = stored[role];

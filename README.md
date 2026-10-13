@@ -3,10 +3,10 @@
 Agent task escrow + ERC-8004 reputation (hackathon MVP).
 
 A buyer agent orders a task from an expert bot. The structured delivery criteria are frozen
-on-chain as a hash and payment is escrowed in an ERC-20. A verifier bot checks the delivery and
-either releases the funds (after user approval, or automatically in `approve_for_me` mode) or
-refunds the buyer. Timeouts also refund. Every settlement writes the fulfillment record (task
-type, amount, pass/fail, on time) to an ERC-8004 Reputation Registry.
+on-chain as a hash and payment is escrowed in an ERC-20. The buyer confirms the delivery:
+`createOrder` sets `verifier` to the buyer address, and that same wallet later calls `release`
+or `fail` (and `approve` when `approval_mode` is `user`). Timeouts also refund. Every settlement
+writes the fulfillment record (task type, amount, pass/fail, on time) to an ERC-8004 Reputation Registry.
 
 > **Testnet only. Never use real funds or keys that hold real funds.** The contracts are unaudited,
 > and the scripts refuse to run on any chain other than Monad testnet, Base Sepolia, and anvil.
@@ -22,11 +22,21 @@ suppliers; **Cursor Automations** and **Grok Bot** are first host adapters, not 
 
 **Hackathon demo (2026-10-13):** cross-bot negotiate via the public relay, then Monad testnet order
 **2** released (5 USDC, `ApproveForMe`). Record, tx hashes, and `specHash` notes:
-[`docs/demos/2026-10-13-dfcb9220/`](docs/demos/2026-10-13-dfcb9220/).
+[`docs/demos/2026-10-13-dfcb9220/`](docs/demos/2026-10-13-dfcb9220/). That run used an older
+three-party layout. New orders do not.
 
-**Self-run after accept:** the Buyer drives escrow (no separate escrow chat bot).
-Path A is the official demo bot (shared Privy, users configure nothing). Path B is the
-public skill (local EOAs). See [Wallet paths](#wallet-paths).
+**Path A demo is two wallets.** The shared Guild Privy app stays, but the buyer bot holds only
+the buyer wallet id and the expert bot holds only the expert wallet id. After negotiate accept,
+the buyer creates and later funds; the expert agrees and later delivers; the buyer releases or
+fails. Pass the next step as a `guild.escrow/v0.1` cue (CLI file or `POST` to `guild-relay/<botId>`).
+There is no verifier bot on this path. The Monad deployment's `defaultVerifier`
+`0x7E70cCAB3c6862005988E1B2e31D76C35EFaC8A8` is not used for new orders. Path B is the public
+skill with two local EOAs. See [Wallet paths](#wallet-paths).
+
+**Path A skills (no secrets in git):** [buyer](docs/skills/guild-negotiate-buyer/SKILL.md) and
+[expert](docs/skills/guild-negotiate-expert/SKILL.md). Public `guild-relay` only (SendToAgent is
+debug-only). Secret card → `_admin/register` → shared Privy app → create or reuse the role
+wallet → faucet → role-split signing.
 
 **Not done (MVP):** real delivery verification, cross-account human buyer, bot directory / friends,
 Tunnel.
@@ -34,8 +44,11 @@ Tunnel.
 - Product spec (source of truth): [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md)
 - Contracts, state machine, hashing, reputation format, and agent integration:
   [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- Off-chain signing with Privy server wallets (one per role: buyer, expert, verifier):
+- Off-chain signing with Privy server wallets (demo path: buyer and expert only):
   [`docs/PRIVY_NOTES.md`](docs/PRIVY_NOTES.md)
+- Path A bot skills (relay, secret-card names, role-split commands):
+  [`docs/skills/guild-negotiate-buyer/SKILL.md`](docs/skills/guild-negotiate-buyer/SKILL.md),
+  [`docs/skills/guild-negotiate-expert/SKILL.md`](docs/skills/guild-negotiate-expert/SKILL.md)
 
 ```
 Created → Agreed (spec frozen) → Funded → Delivered → Verified(pass/fail) → Released | Refunded
@@ -51,10 +64,12 @@ Created → Agreed (spec frozen) → Funded → Delivered → Verified(pass/fail
 | `contracts/libraries/FulfillmentFeedback.sol` | On-chain ERC-8004 feedback file (JSON data URI) |
 | `contracts/mocks/MockUSDC.sol` | 6-decimal test token with open `mint` |
 | `script/Deploy.s.sol` | Deploys the stack and writes `deployments/<chainId>.json` |
-| `script/Demo.s.sol` | Runs the spec's "Guild logo, 5 USDC, 24h" order step by step |
-| `script/demo-local.sh` | One-command local demo on anvil (Foundry) |
-| `agents/` | TypeScript buyer / expert / verifier agents (viem + Privy or local keys) |
-| `templates/` | Public Buyer / Expert / Verifier skills (path B: local EOAs, no Guild Privy secret) |
+| `script/Demo.s.sol` | Optional local Foundry replay (two keys, verifier = buyer). Not Path A |
+| `script/demo-local.sh` | Optional one-command local replay on anvil (Foundry). Not Path A |
+| `agents/` | TypeScript buyer / expert commands (viem + Privy or local keys) |
+| `docs/skills/guild-negotiate-buyer/` | Path A buyer skill: public relay, buyer wallet, create / fund / release |
+| `docs/skills/guild-negotiate-expert/` | Path A expert skill: public relay, expert wallet, agree / deliver |
+| `templates/` | Path B public skills (local EOAs, no Guild Privy secret). Verifier template is archived |
 | `agents/script/demo-local.sh` | Deploy on anvil + run the logo demo via the agents CLI |
 | `relay/` | Supabase Edge Function `guild-relay` (public delivery proxy; no secrets in git) |
 | `docs/demos/` | Sanitized end-to-end demo records (negotiation + on-chain) |
@@ -72,19 +87,21 @@ forge test                    # 123 tests
 forge test --network monad    # same suite with Monad execution semantics
 ```
 
-## One-command demo
+## One-command local replay (not Path A)
 
 ```bash
 ./script/demo-local.sh
 ```
 
-The script starts anvil (unless something is already listening on `:8545`) and deploys the
-stack. It then runs four orders and prints the transaction hash of every step:
+This Foundry script is an optional local replay. It is not the Path A critical path, which is
+the split TypeScript commands below. The script starts anvil (unless something is already
+listening on `:8545`) and deploys the stack. It then runs four orders with two keys (buyer and
+expert). `createOrder.verifier` is the buyer address. The buyer signs `release` / `fail`.
 
-1. **Pass, user approval:** `register` ×3 (expert, buyer, verifier) → `createOrder` → `agree` →
-   `fund` → `submitDelivery` → `release` → `approve`.
-2. **Pass, `approve_for_me`:** the verifier's `release` pays the expert in the same transaction.
-3. **Fail:** the verifier's `fail` refunds the buyer.
+1. **Pass, user approval:** `register` ×2 (expert, buyer) → `createOrder` → `agree` →
+   `fund` → `submitDelivery` → buyer `release` → buyer `approve`.
+2. **Pass, `approve_for_me`:** the buyer's `release` pays the expert in the same transaction.
+3. **Fail:** the buyer's `fail` refunds the buyer.
 4. **Timeout:** the order is funded but never delivered. The script advances anvil's clock past
    the deadline and calls `refundExpired`.
 
@@ -93,14 +110,14 @@ Output excerpt:
 
 ```
 == Pass, user approval: Created > Agreed > Funded > Delivered > Verified > Released ==
-  0x7f15…564c  IdentityRegistry.register
+  0x7f15…564c  IdentityRegistry.register (expert, then buyer)
   …
-  0x070c…65ec  TaskEscrow.createOrder
-  0xbb3f…e9b5  TaskEscrow.agree
-  0xb8fe…6910  TaskEscrow.fund
-  0xf9a8…0aeb  TaskEscrow.submitDelivery
-  0xad5a…e413  TaskEscrow.release
-  0x445a…e9f6  TaskEscrow.approve
+  0x070c…65ec  TaskEscrow.createOrder   (verifier = buyer)
+  0xbb3f…e9b5  TaskEscrow.agree         (expert)
+  0xb8fe…6910  TaskEscrow.fund          (buyer)
+  0xf9a8…0aeb  TaskEscrow.submitDelivery (expert)
+  0xad5a…e413  TaskEscrow.release       (buyer)
+  0x445a…e9f6  TaskEscrow.approve       (buyer, user mode)
 ```
 
 ## Deploy
@@ -112,7 +129,7 @@ loads `.env` automatically). The chain is selected by the RPC alias in `foundry.
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `PRIVATE_KEY` | — | Deployer key. Prefer a keystore: `cast wallet import deployer --interactive`, then pass `--account deployer` and leave this unset. |
-| `DEFAULT_VERIFIER` | deployer | Protocol verifier bot address, used when an order names no verifier. Immutable. |
+| `DEFAULT_VERIFIER` | deployer | Immutable fallback only when an order passes `verifier = 0`. Demo orders pass the buyer address. |
 | `PAYMENT_TOKEN` | deploy MockUSDC | Existing ERC-20 to settle in. |
 | `IDENTITY_REGISTRY` / `REPUTATION_REGISTRY` | deploy new | Reuse existing ERC-8004 registries. A reputation registry requires its identity registry. |
 | `MOCK_USDC_MINT` / `MOCK_USDC_MINT_TO` | 0 / deployer | Initial mUSDC mint (6 decimals: `1000000000` = 1,000 mUSDC). |
@@ -156,11 +173,11 @@ forge script script/Deploy.s.sol --rpc-url base_sepolia \
 
 ### Running the demo on a testnet
 
-After deploying, run the same demo as the local one. You need three distinct testnet keys with gas:
-`BUYER_PRIVATE_KEY`, `EXPERT_PRIVATE_KEY`, and `VERIFIER_PRIVATE_KEY`. The demo names the
-verifier key's address as the order's verifier, so it does not have to be `DEFAULT_VERIFIER`. With
-MockUSDC the buyer mints its own tokens. With Circle USDC, fund the buyer with at least 5 USDC
-first.
+After deploying, the optional Foundry replay uses two distinct testnet keys with gas:
+`BUYER_PRIVATE_KEY` and `EXPERT_PRIVATE_KEY`. The order's verifier is the buyer address, not
+`DEFAULT_VERIFIER`. With MockUSDC the buyer mints its own tokens. With Circle USDC, fund the
+buyer with at least 5 USDC first. Path A on a testnet uses the split commands in
+[Wallet paths](#wallet-paths), not this one-process script.
 
 ```bash
 SCENARIO=pass APPROVAL_MODE=user \
@@ -188,10 +205,12 @@ CI (`.github/workflows/ci.yml`) runs format, lint, build, and the full test suit
 
 ## TypeScript agents (logo demo)
 
-Off-chain agents live in [`agents/`](agents/). They mirror `script/Demo.s.sol`: register ERC-8004
-agents, `createOrder` → `agree` → `fund` → `submitDelivery` → `release`/`fail`, then buyer
-`approve` when `approval_mode=user`. Criteria JSON is hashed with RFC 8785 (JCS), matching
-`TaskEscrow.hashSpec` and the pinned vector in `test/Demo.t.sol`.
+Off-chain agents live in [`agents/`](agents/). The demo critical path is three commands, two
+wallets: buyer `createOrder` + token approve, expert `agree`, buyer `fund`, expert
+`submitDelivery`, buyer `release` or `fail` (and `approve` when `approval_mode` is `user`).
+Criteria JSON is hashed with RFC 8785 (JCS), matching `TaskEscrow.hashSpec` and the pinned
+vector in `test/Demo.t.sol`. `npm run demo` is an optional local-dev replay with local EOAs
+only. It refuses to run when Privy app secrets are set.
 
 **Signing** goes through a wallet adapter ([`agents/src/wallet/adapter.ts`](agents/src/wallet/adapter.ts)):
 `getAddress()`, `sendEscrowStep` (today's `TxSender.send`), optional `createIfNeeded()`, and
@@ -206,39 +225,37 @@ cd agents && npm ci && npm test && npm run typecheck
 
 ## Wallet paths
 
-Two ways to sign. Both run the same post-accept escrow. Neither path puts a Guild
-`PRIVY_APP_SECRET` in the public template.
+Two ways to sign. Both use the same two-wallet handoff. Neither path puts a Guild
+`PRIVY_APP_SECRET` in the public template. Neither path requires a verifier wallet.
 
-### Path A — official Guild demo bot (`PrivyShared`)
+### Path A — official Guild demo (`PrivyShared`)
 
-The hosted demo bot already holds the shared Guild Privy app. **Users of that bot do not
-configure Privy.** On first run the bot creates buyer, expert, and verifier server wallets
-(`POST /v1/wallets`, `User-Agent: PrivyNodeJS/1.0`) if ids are missing, then after an expert
-accept it runs escrow itself. Guild operators keep `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, and
-`PRIVY_WALLET_*` as host secrets (see [`docs/PRIVY_NOTES.md`](docs/PRIVY_NOTES.md)). Do not
-copy those into a skill file or into git.
+The hosted bots share the Guild Privy **app**. **Users do not configure Privy.** Each bot
+receives only its own wallet id: the buyer bot gets `PRIVY_WALLET_BUYER_ID`, the expert bot
+gets `PRIVY_WALLET_EXPERT_ID`. A buyer process does not call Privy with the expert wallet id.
+`PRIVY_WALLET_VERIFIER_*` is not part of this path. Operators bootstrap the two wallets
+(`POST /v1/wallets`, `User-Agent: PrivyNodeJS/1.0`) and copy one id onto each bot. Do not
+commit those secrets. See [`docs/PRIVY_NOTES.md`](docs/PRIVY_NOTES.md).
 
 ```bash
 cd agents && npm run wallets:bootstrap
-cd agents && npm run escrow:after-accept -- ../accept.json
 ```
 
 ### Path B — public skill / self-hosted (`LocalEoa`)
 
-[`templates/`](templates/) is this path. **Do not ship the Guild app secret.** Generate three
-throwaway testnet EOAs (buyer, expert, verifier). On chain `31337`, anvil's default keys are
-used when the env vars are unset.
+[`templates/`](templates/) is this path. **Do not ship the Guild app secret.** Generate two
+throwaway testnet EOAs (buyer, expert). On chain `31337`, anvil's buyer and expert default
+keys are used when the env vars are unset.
 
 ```bash
-cast wallet new    # repeat for each role; never a key that holds real funds
+cast wallet new    # buyer, then expert. Never a key that holds real funds.
 export BUYER_PRIVATE_KEY=0x…
 export EXPERT_PRIVATE_KEY=0x…
-export VERIFIER_PRIVATE_KEY=0x…
 cast wallet address --private-key "$BUYER_PRIVATE_KEY"
 ```
 
 Leave `PRIVY_APP_ID` and `PRIVY_APP_SECRET` empty so the CLI stays on `LocalEoa`. Fund each
-address with testnet gas, then run the same accept command:
+address with testnet gas, then run the handoff below:
 
 | Chain | `fundHint` |
 | --- | --- |
@@ -253,17 +270,31 @@ optional UX upgrade on that later path, not the self-host default.
 
 ### After accept (both paths)
 
-The Buyer skill runs create → agree → fund → deliver → verify → release. Expert signs only
-`agree` and `submitDelivery`. Verifier signs only `release` or `fail`. No handoff to a separate
-escrow chat bot.
+Chain order is fixed, so each command does the step that role can sign and then stops. The
+next bot receives a `guild.escrow/v0.1` cue (a JSON file, or `POST` to
+`guild-relay/<botId>` when `GUILD_NEXT_RELAY_URL` is set). If the on-chain status is wrong,
+the command stops and does not use the other role's key.
+
+| Command | Wallet | What it signs | Next cue |
+| --- | --- | --- | --- |
+| `escrow:buyer-create-fund` on an accept | Buyer | token `approve` (+ mint on MockUSDC) and `createOrder` (`verifier` = buyer) | `expert-agree` |
+| `escrow:expert-agree-deliver` | Expert | `agree` when status is Created | `buyer-fund` |
+| `escrow:buyer-create-fund` on a `buyer-fund` cue | Buyer | `fund` when status is Agreed | `expert-deliver` (or `done` on timeout) |
+| `escrow:expert-agree-deliver` | Expert | `submitDelivery` when status is Funded | `buyer-release` |
+| `escrow:buyer-release` | Buyer | `release` or `fail`; `approve` as well when the order is `user` mode | `done` |
 
 ```bash
-cd agents && npm run escrow:after-accept -- ../accept.json
+cd agents && npm run escrow:buyer-create-fund -- ../accept.json
+cd agents && npm run escrow:expert-agree-deliver -- ../cue.json
+cd agents && npm run escrow:buyer-create-fund -- ../cue.json
+cd agents && npm run escrow:expert-agree-deliver -- ../cue.json
+cd agents && npm run escrow:buyer-release -- ../cue.json
 ```
 
 `accept.json` is the accept envelope or a negotiation record whose `latest` message is that
 accept (`docs/demos/2026-10-13-dfcb9220/`). Approval mode comes from the frozen task.
-`SCENARIO=pass|fail|timeout` is only a demo knob.
+`SCENARIO=pass|fail|timeout` is only a demo knob, and the cue carries it forward.
+`npm run demo` and `script/Demo.s.sol` are optional local-dev replays, not this path.
 
 Caps (USDC base units, 6 decimals) apply before any transaction:
 
@@ -292,7 +323,7 @@ interface EscrowWallet {
 | `LocalEoa` | B, public skill | `createLocalSender` |
 | `UserAaSession` | later | not implemented |
 
-### Local anvil (one command)
+### Local anvil (optional replay, not Path A)
 
 ```bash
 ./agents/script/demo-local.sh
@@ -300,19 +331,25 @@ interface EscrowWallet {
 
 ### Against a deployed testnet
 
-1. Deploy with Foundry (`deployments/<chainId>.json` is written automatically).
-2. Fund the three role wallets with native gas; mint or transfer MockUSDC to the buyer.
-3. Set `DEFAULT_VERIFIER` at deploy time to the Privy verifier address (or pass that address in
-   `OrderParams.verifier` from the buyer agent).
+1. Deploy with Foundry (`deployments/<chainId>.json` is written automatically). The source
+   allows `verifier` to be the buyer. The Monad deployment already on chain
+   (`defaultVerifier` `0x7E70cCAB3c6862005988E1B2e31D76C35EFaC8A8`) still has the older check
+   and will revert until it is replaced. The role commands simulate first and stop without
+   broadcasting when the chain would revert. Do not pass `0x7E70…` on new orders.
+2. Fund the buyer and expert wallets with native gas; mint or transfer MockUSDC to the buyer.
+3. `createOrder` sets `verifier` to the buyer address. `DEFAULT_VERIFIER` is only the
+   contract fallback when an order passes the zero address. The demo commands do not pass zero.
 
 **Monad testnet** — chain id `10143`, CAIP-2 `eip155:10143` (verify in Privy before demo day):
 
 ```bash
 export RPC_URL="$MONAD_TESTNET_RPC"
 export CHAIN_ID=10143
-# Privy + wallet ids, or BUYER_/EXPERT_/VERIFIER_PRIVATE_KEY for a dry key-based smoke test
-export SCENARIO=pass APPROVAL_MODE=approve_for_me
-cd agents && npm run demo
+export EXPERT_AGENT_ID=1
+# Buyer bot: PRIVY_APP_ID, PRIVY_APP_SECRET, PRIVY_WALLET_BUYER_ID, PRIVY_WALLET_BUYER_ADDRESS
+cd agents && npm run escrow:buyer-create-fund -- ../accept.json
+# Expert bot, same app id/secret, only PRIVY_WALLET_EXPERT_*:
+cd agents && npm run escrow:expert-agree-deliver -- ../cue.json
 ```
 
 **Base Sepolia fallback** — chain id `84532`, CAIP-2 `eip155:84532`:
@@ -321,11 +358,10 @@ cd agents && npm run demo
 export RPC_URL="$BASE_SEPOLIA_RPC"
 export CHAIN_ID=84532
 export PRIVY_CAIP2=eip155:84532
-cd agents && npm run demo
 ```
 
-CI runs `agents` typecheck and unit tests without live Privy. Set `EXPERT_AGENT_ID`,
-`BUYER_AGENT_ID`, and `VERIFIER_AGENT_ID` to reuse agents from a previous run.
+CI runs `agents` typecheck and unit tests without live Privy. Set `EXPERT_AGENT_ID` and
+`BUYER_AGENT_ID` to reuse agents from a previous run. `BUYER_AGENT_ID` may be `0`.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#wallets-privy-server-wallets) for the full
 role-to-call mapping.

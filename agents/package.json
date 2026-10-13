@@ -11,7 +11,9 @@
     "demo": "tsx src/cli.ts",
     "demo:local": "tsx src/cli.ts --local-anvil",
     "wallets:bootstrap": "tsx src/cli.ts --bootstrap-wallets",
-    "escrow:after-accept": "tsx src/cli.ts --after-accept"
+    "escrow:buyer-create-fund": "tsx src/cli.ts --buyer-create-fund",
+    "escrow:expert-agree-deliver": "tsx src/cli.ts --expert-agree-deliver",
+    "escrow:buyer-release": "tsx src/cli.ts --buyer-release"
   },
   "bin": {
     "agent-escrow-demo": "./src/cli.ts"

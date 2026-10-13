@@ -9,7 +9,6 @@ contract DemoTest is BaseTest {
     Demo internal demo;
     uint256 internal buyerKey;
     uint256 internal expertKey;
-    uint256 internal verifierKey;
 
     function setUp() public override {
         super.setUp();
@@ -17,13 +16,11 @@ contract DemoTest is BaseTest {
         demo = new Demo();
         (, buyerKey) = makeAddrAndKey("demoBuyer");
         (, expertKey) = makeAddrAndKey("demoExpert");
-        (, verifierKey) = makeAddrAndKey("demoVerifier");
     }
 
     function _config(Demo.Scenario scenario, bool approveForMe) internal view returns (Demo.Config memory c) {
         c.buyerKey = buyerKey;
         c.expertKey = expertKey;
-        c.verifierKey = verifierKey;
         c.scenario = scenario;
         c.approveForMe = approveForMe;
     }
@@ -48,6 +45,7 @@ contract DemoTest is BaseTest {
         assertEq(count, 1);
         assertEq(rate, 100);
         assertEq(escrow.getOrder(r.orderId).specHash, keccak256(bytes(demo.specJsonFor(false, deliverBy))));
+        assertEq(escrow.getOrder(r.orderId).verifier, vm.addr(buyerKey));
     }
 
     function test_demo_passWithApproveForMe() public {
@@ -72,12 +70,11 @@ contract DemoTest is BaseTest {
         Demo.Config memory c = _config(Demo.Scenario.Pass, false);
         c.expertAgentId = first.expertAgentId;
         c.buyerAgentId = first.buyerAgentId;
-        c.verifierAgentId = first.verifierAgentId;
         Demo.Result memory second = demo.execute(escrow, c);
         assertEq(second.expertAgentId, first.expertAgentId);
-        assertEq(second.verifierAgentId, first.verifierAgentId);
-        assertEq(identity.totalAgents(), first.verifierAgentId);
-        assertEq(identity.ownerOf(first.verifierAgentId), vm.addr(verifierKey));
+        assertEq(second.buyerAgentId, first.buyerAgentId);
+        assertEq(identity.totalAgents(), first.buyerAgentId);
+        assertEq(identity.ownerOf(first.buyerAgentId), vm.addr(buyerKey));
         assertEq(second.orderId, first.orderId + 1);
         (uint64 count,,) = reputation.getSummary(first.expertAgentId, _clients(), "expert", TASK_TYPE);
         assertEq(count, 2);
@@ -108,6 +105,5 @@ contract DemoTest is BaseTest {
         Demo.Config memory c = demo.configFromEnv();
         assertEq(vm.addr(c.buyerKey), 0x70997970C51812dc3A010C7d01b50e0d17dc79C8);
         assertEq(vm.addr(c.expertKey), 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC);
-        assertEq(vm.addr(c.verifierKey), 0x90F79bf6EB2c4f870365E785982E1f101E93b906);
     }
 }

@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 describe("ensurePrivyRoleWallets", () => {
-  it("creates three ethereum server wallets when ids are missing", async () => {
+  it("creates buyer and expert wallets when ids are missing", async () => {
     const dir = mkdtempSync(join(tmpdir(), "guild-wallets-"));
     const filePath = join(dir, "guild-roles.json");
     const seen: Array<{ url: string; init: RequestInit }> = [];
@@ -36,10 +36,10 @@ describe("ensurePrivyRoleWallets", () => {
       filePath,
     });
     expect(result).not.toBeNull();
-    expect(result!.created).toEqual(["buyer", "expert", "verifier"]);
-    expect(result!.config.wallets.buyer.walletId).toBe("wallet-buyer");
-    expect(result!.config.wallets.buyer.address).toBe("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
-    expect(seen).toHaveLength(3);
+    expect(result!.created).toEqual(["buyer", "expert"]);
+    expect(result!.config.wallets.buyer?.walletId).toBe("wallet-buyer");
+    expect(result!.config.wallets.buyer?.address).toBe("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
+    expect(seen).toHaveLength(2);
     for (const call of seen) {
       expect(call.url).toBe("https://api.privy.io/v1/wallets");
       const headers = call.init.headers as Record<string, string>;
@@ -50,13 +50,14 @@ describe("ensurePrivyRoleWallets", () => {
     expect(seen.map((c) => (c.init.headers as Record<string, string>)["privy-idempotency-key"])).toEqual([
       "guild-escrow-server-wallet:buyer",
       "guild-escrow-server-wallet:expert",
-      "guild-escrow-server-wallet:verifier",
     ]);
 
     const stored = readFileSync(filePath, "utf8");
     expect(stored).not.toContain(APP_SECRET);
     expect(stored).not.toContain("PRIVY_APP_SECRET");
     expect(formatWalletSecretLines(result!)).toContain("PRIVY_WALLET_BUYER_ID=wallet-buyer");
+    expect(formatWalletSecretLines(result!)).toContain("PRIVY_WALLET_EXPERT_ID=wallet-expert");
+    expect(formatWalletSecretLines(result!)).not.toContain("PRIVY_WALLET_VERIFIER_ID");
     expect(formatWalletSecretLines(result!)).not.toContain(APP_SECRET);
 
     const fetchAgain = vi.fn<typeof fetch>();
@@ -67,7 +68,7 @@ describe("ensurePrivyRoleWallets", () => {
     });
     expect(fetchAgain).not.toHaveBeenCalled();
     expect(again!.created).toEqual([]);
-    expect(again!.source).toEqual({ buyer: "file", expert: "file", verifier: "file" });
+    expect(again!.source).toEqual({ buyer: "file", expert: "file" });
   });
 
   it("reuses env ids and fetches a missing address", async () => {
@@ -94,7 +95,7 @@ describe("ensurePrivyRoleWallets", () => {
     });
     expect(result!.created).toEqual([]);
     expect(result!.source.expert).toBe("env");
-    expect(result!.config.wallets.expert.address).toBe("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC");
+    expect(result!.config.wallets.expert?.address).toBe("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC");
   });
 
   it("explains Privy 403 without echoing the app secret", async () => {
