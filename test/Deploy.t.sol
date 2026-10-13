@@ -65,7 +65,7 @@ contract DeployTest is Test {
         deployer.run();
     }
 
-    function test_deploy_supportedChains() public {
+    function test_deploy_supportedChains() public view {
         assertTrue(deployer.isSupportedChain(10143)); // Monad testnet
         assertTrue(deployer.isSupportedChain(84532)); // Base Sepolia
         assertTrue(deployer.isSupportedChain(31337)); // Anvil
