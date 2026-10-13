@@ -32,6 +32,13 @@ contract DemoTest is BaseTest {
         assertEq(demo.specJsonFor(false, deliverBy), SPEC_JSON);
     }
 
+    /// @dev Reference vector for the TypeScript agents: `keccak256(toBytes(canonicalize(spec)))` with the
+    ///      `canonicalize` (RFC 8785) npm package and viem, for the template in BaseTest.
+    function test_specHash_matchesOffChainJcsVector() public view {
+        assertEq(SPEC_HASH, 0xf17141832feb6a9f4c7f33ea2cc83f40f40d4f6ef18fe8445a2cd6a5fc7f83ac);
+        assertEq(escrow.hashSpec(bytes(SPEC_JSON)), SPEC_HASH);
+    }
+
     function test_demo_passWithUserApproval() public {
         Demo.Result memory r = demo.execute(escrow, _config(Demo.Scenario.Pass, false));
         assertEq(uint8(r.status), uint8(ITaskEscrow.Status.Released));
