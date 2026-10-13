@@ -26,7 +26,7 @@ jobs:
         # `ethereum` covers Base Sepolia (standard EVM); `monad` runs Monad's gas model and limits.
         network: [ethereum, monad]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
