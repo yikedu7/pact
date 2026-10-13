@@ -1,6 +1,11 @@
-# agent-escrow
+# Pact
 
-Agent task escrow + ERC-8004 reputation (hackathon MVP).
+Agent task escrow + ERC-8004 on Monad.
+
+**Pact** is on-chain escrow for agent-to-agent work. A personal agent can hire an expert bot:
+they negotiate terms off-chain, then payment is held in escrow until the buyer confirms delivery.
+Negotiation and signing run through pluggable suppliers; **Cursor Automations** and **Grok Bot**
+are first host adapters, not the product.
 
 A buyer agent orders a task from an expert bot. The structured delivery criteria are frozen
 on-chain as a hash and payment is escrowed in an ERC-20. The buyer confirms the delivery:
@@ -10,9 +15,6 @@ writes the fulfillment record (task type, amount, pass/fail, on time) to an ERC-
 
 > **Testnet only. Never use real funds or keys that hold real funds.** The contracts are unaudited,
 > and the scripts refuse to run on any chain other than Monad testnet, Base Sepolia, and anvil.
-
-Guild is **on-chain escrow for agent task deals**. Negotiation and signing run through pluggable
-suppliers; **Cursor Automations** and **Grok Bot** are first host adapters, not the product.
 
 | Layer | In this repo | Responsibility |
 | --- | --- | --- |
@@ -25,7 +27,7 @@ suppliers; **Cursor Automations** and **Grok Bot** are first host adapters, not 
 [`docs/demos/2026-10-13-dfcb9220/`](docs/demos/2026-10-13-dfcb9220/). That run used an older
 three-party layout. New orders do not.
 
-**Path A demo is two wallets.** The shared Guild Privy app stays, but the buyer bot holds only
+**Path A demo is two wallets.** The shared Path A Privy app stays, but the buyer bot holds only
 the buyer wallet id and the expert bot holds only the expert wallet id. After negotiate accept,
 the buyer creates and later funds; the expert agrees and later delivers; the buyer releases or
 fails. Pass the next step as a `guild.escrow/v0.1` cue (CLI file or `POST` to `guild-relay/<botId>`).
@@ -69,7 +71,7 @@ Created → Agreed (spec frozen) → Funded → Delivered → Verified(pass/fail
 | `agents/` | TypeScript buyer / expert commands (viem + Privy or local keys) |
 | `docs/skills/guild-negotiate-buyer/` | Path A buyer skill: public relay, buyer wallet, create / fund / release |
 | `docs/skills/guild-negotiate-expert/` | Path A expert skill: public relay, expert wallet, agree / deliver |
-| `templates/` | Path B public skills (local EOAs, no Guild Privy secret). Verifier template is archived |
+| `templates/` | Path B public skills (local EOAs, no Path A Privy app secret). Verifier template is archived |
 | `agents/script/demo-local.sh` | Deploy on anvil + run the logo demo via the agents CLI |
 | `relay/` | Supabase Edge Function `guild-relay` (public delivery proxy; no secrets in git) |
 | `docs/demos/` | Sanitized end-to-end demo records (negotiation + on-chain) |
@@ -80,7 +82,7 @@ Created → Agreed (spec frozen) → Funded → Delivered → Verified(pass/fail
 Requires [Foundry](https://getfoundry.sh) (CI pins v1.8.5) and `jq` (for the demo script).
 
 ```bash
-git clone --recursive https://github.com/yikedu7/agent-escrow && cd agent-escrow
+git clone --recursive https://github.com/yikedu7/pact && cd pact
 # already cloned without --recursive?  git submodule update --init --recursive
 forge build
 forge test                    # 123 tests
@@ -225,12 +227,12 @@ cd agents && npm ci && npm test && npm run typecheck
 
 ## Wallet paths
 
-Two ways to sign. Both use the same two-wallet handoff. Neither path puts a Guild
+Two ways to sign. Both use the same two-wallet handoff. Neither path puts a Path A
 `PRIVY_APP_SECRET` in the public template. Neither path requires a verifier wallet.
 
-### Path A — official Guild demo (`PrivyShared`)
+### Path A — official Pact demo (`PrivyShared`)
 
-The hosted bots share the Guild Privy **app**. **Users do not configure Privy.** Each bot
+The hosted bots share one Privy **app** (Path A demo). **Users do not configure Privy.** Each bot
 receives only its own wallet id: the buyer bot gets `PRIVY_WALLET_BUYER_ID`, the expert bot
 gets `PRIVY_WALLET_EXPERT_ID`. A buyer process does not call Privy with the expert wallet id.
 `PRIVY_WALLET_VERIFIER_*` is not part of this path. Operators bootstrap the two wallets
@@ -243,7 +245,7 @@ cd agents && npm run wallets:bootstrap
 
 ### Path B — public skill / self-hosted (`LocalEoa`)
 
-[`templates/`](templates/) is this path. **Do not ship the Guild app secret.** Generate two
+[`templates/`](templates/) is this path. **Do not ship the Path A Privy app secret.** Generate two
 throwaway testnet EOAs (buyer, expert). On chain `31337`, anvil's buyer and expert default
 keys are used when the env vars are unset.
 

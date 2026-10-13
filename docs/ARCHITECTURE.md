@@ -21,7 +21,7 @@ Agent-to-agent task escrow with ERC-8004 reputation. Product source of truth:
                  └────────────────────┘                             └──────────────────────────────┘
 ```
 
-## Guild stack (suppliers)
+## Pact stack (suppliers)
 
 Three layers; only the **protocol core** is chain-native. Hosts (Cursor Automations, Grok Bot, …)
 plug in at the channel and runtime boundaries.
@@ -72,8 +72,8 @@ interface EscrowWallet {
 
 | Vendor | Who | Now |
 | --- | --- | --- |
-| `PrivyShared` | Path A. Shared Guild Privy app. Each bot gets only its own wallet id (buyer or expert). Users do not configure Privy. Bootstrap may `POST /v1/wallets` for those two roles. | implemented |
-| `LocalEoa` | Path B, public skill / self-host ([`templates/`](../templates/)). No Guild `app_secret` in the template. Two local keys (buyer, expert), then a testnet faucet. | implemented (`local.ts`) |
+| `PrivyShared` | Path A. Shared Path A Privy app (official demo). Each bot gets only its own wallet id (buyer or expert). Users do not configure Privy. Bootstrap may `POST /v1/wallets` for those two roles. | implemented |
+| `LocalEoa` | Path B, public skill / self-host ([`templates/`](../templates/)). No Path A `app_secret` in the template. Two local keys (buyer, expert), then a testnet faucet. | implemented (`local.ts`) |
 | `UserAaSession` | Later social-login account abstraction. | not implemented |
 
 ZeroDev / a paymaster is an optional UX upgrade on a future AA path. It is not the self-host default.
@@ -153,13 +153,13 @@ The spec JSON follows the template in `PRODUCT_SPEC.md`:
 ```json
 {
   "task_type": "design.logo",
-  "title": "Guild logo",
+  "title": "Pact logo",
   "price": {"token": "USDC", "amount": "5"},
   "deadline": "2026-10-14T12:00:00Z",
   "deliverables": [{"kind": "image/png", "min_size": "1024x1024", "count": 3}],
   "acceptance_criteria": [
     {"id": "c1", "type": "auto", "check": "file_format == png && size >= 1024"},
-    {"id": "c2", "type": "llm", "check": "包含文字 'Guild'，风格简洁"}
+    {"id": "c2", "type": "llm", "check": "包含文字 'Pact'，风格简洁"}
   ],
   "approval_mode": "user",
   "revisions": 1

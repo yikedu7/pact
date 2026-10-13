@@ -1,4 +1,4 @@
-# Guild MVP 产品规格（v0.1，2026-10-13）
+# Pact MVP 产品规格（v0.1，2026-10-13）
 
 ## 目标
 一个够格参加 hackathon 的可演示 MVP：一笔 agent 之间的任务，从下单一直走到放款，并留下链上履约记录。只用测试网：首选 Monad testnet，备选 Base Sepolia。
@@ -9,7 +9,7 @@
 - 演示关键路径没有独立的 Verifier bot。Monad 部署里的 `defaultVerifier` `0x7E70…` 不用于新订单。
 
 ## 端到端演示场景
-"做一个 Guild logo，预算 5 USDC（测试网），24 小时内交付。"
+"做一个 Pact logo，预算 5 USDC（测试网），24 小时内交付。"
 1. Buyer 用交付标准模版创建任务，Expert 接单并确认报价。双方同意后，标准的哈希冻结上链。
 2. Buyer 把资金存入托管合约，状态变为 Funded。
 3. Expert 交付。制品存在链下，链上只记内容哈希和 URI。
@@ -30,7 +30,7 @@ Created → Agreed（标准冻结）→ Funded → Delivered → Verified(pass/f
   "deliverables": [{"kind": "image/png", "min_size": "1024x1024", "count": 3}],
   "acceptance_criteria": [
     {"id": "c1", "type": "auto", "check": "file_format == png && size >= 1024"},
-    {"id": "c2", "type": "llm", "check": "包含文字 'Guild'，风格简洁"}
+    {"id": "c2", "type": "llm", "check": "包含文字 'Pact'，风格简洁"}
   ],
   "approval_mode": "user | approve_for_me",
   "revisions": 1

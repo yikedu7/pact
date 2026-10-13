@@ -1,4 +1,4 @@
-# Guild Buyer / Expert templates (path B)
+# Pact buyer / expert templates (path B)
 
 Public skill for a self-hosted bot. After a negotiate accept, the buyer and the expert each
 sign only their own steps and pass a `guild.escrow/v0.1` cue to the other. There is no
@@ -9,9 +9,9 @@ Path A (shared Privy app, public guild-relay, secret card) is documented in
 and [`docs/skills/guild-negotiate-expert/SKILL.md`](../docs/skills/guild-negotiate-expert/SKILL.md).
 Those files name secrets. They do not contain them.
 
-This template does **not** include the Guild Privy app secret. Signing is `LocalEoa`: two
+This template does **not** include the Path A Privy app secret. Signing is `LocalEoa`: two
 keys you generate (buyer and expert). The official demo (path A, `PrivyShared`) uses the same
-handoff with the shared Guild Privy app, and each bot receives only its own wallet id.
+handoff with the shared Path A Privy app, and each bot receives only its own wallet id.
 
 ## Configure
 

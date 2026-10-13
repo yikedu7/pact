@@ -3,7 +3,7 @@ name: guild-verifier
 description: Archived. The demo path has no verifier bot. Buyer release uses the buyer wallet.
 ---
 
-# Guild Verifier (archived, not the demo path)
+# Pact verifier (archived, not the demo path)
 
 The demo critical path does not use a verifier bot or `PRIVY_WALLET_VERIFIER_*`.
 

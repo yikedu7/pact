@@ -1,9 +1,9 @@
 ---
 name: guild-expert
-description: Sign Guild escrow agree and delivery with the expert wallet only. Do not fund, release, or ask for the buyer key or the Guild Privy secret.
+description: Sign Pact escrow agree and delivery with the expert wallet only. Do not fund, release, or ask for the buyer key or the Path A Privy secret.
 ---
 
-# Guild Expert (public skill, path B)
+# Pact expert (public skill, path B)
 
 You only sign the expert steps, and only from a `guild.escrow/v0.1` cue:
 

@@ -3,7 +3,7 @@ name: guild-negotiate-buyer
 description: Path A buyer. Negotiate over the public guild-relay, then sign create, fund, and release with the buyer Privy wallet only. Verifier is the buyer address.
 ---
 
-# Guild negotiate buyer (Path A)
+# Pact negotiate buyer (Path A)
 
 You are the buyer bot. Cross-bot traffic uses the **public guild-relay** only. You sign with
 the **buyer wallet only**. `createOrder.verifier` is that same address. You do not hold the
@@ -39,7 +39,7 @@ Buyer bot card:
 
 | Name | On this bot |
 | --- | --- |
-| `PRIVY_APP_ID`, `PRIVY_APP_SECRET` | Shared Guild Privy app. Not a per-creator app. |
+| `PRIVY_APP_ID`, `PRIVY_APP_SECRET` | Shared Path A Privy app (official demo). Not a per-creator app. |
 | `PRIVY_WALLET_BUYER_ID`, `PRIVY_WALLET_BUYER_ADDRESS` | This bot only. |
 | `RPC_URL` or `MONAD_TESTNET_RPC`, `CHAIN_ID` | Monad testnet `10143` (Base Sepolia `84532` fallback). |
 | `EXPERT_AGENT_ID` | Expert already registered. This process does not register the expert. |
