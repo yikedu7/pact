@@ -1,14 +1,23 @@
 import type { Address } from "viem";
 import {
   encodeApprove,
+  encodeApproveOrder,
   encodeCreateOrder,
   encodeFund,
   encodeMint,
-  encodeApproveOrder,
+  encodeRegister,
 } from "../encode.js";
 import type { ApprovalModeLabel, TaskSpec } from "../spec.js";
 import { PRICE_UNITS, specHash } from "../spec.js";
 import type { TxSender } from "../wallet/types.js";
+
+export async function buyerRegister(
+  buyer: TxSender,
+  registry: Address,
+  agentUri = "ipfs://guild-buyer-agent.json",
+): Promise<string> {
+  return buyer.send(encodeRegister(agentUri, registry));
+}
 
 export interface BuyerCreateParams {
   escrow: Address;

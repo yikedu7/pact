@@ -174,7 +174,25 @@ Reputation never blocks settlement. `giveFeedback` runs in `try/catch`. On failu
 emits `ReputationWriteFailed` and the payment still moves. Feedback can fail, for example, if an
 agent owner approves the escrow as an ERC-721 operator, which ERC-8004 treats as self-feedback.
 
+## Suppliers
+
+Negotiation and execution sit beside the contracts as vendor layers. Cursor Automations is the
+negotiation host (HTTPS POST of `guild.negotiate/v0.1`). Grok Bot is the execution host (buyer,
+expert, and verifier skills). Neither host client lives in this repository. The TypeScript
+boundary those adapters implement is `agents/src/suppliers/`.
+
+| Interface | File | In-repo adapter |
+| --- | --- | --- |
+| `NegotiationChannel` — `send(envelope)` / `onMessage` for `guild.negotiate/v0.1` | `agents/src/suppliers/channel.ts` | `createInMemoryChannel`. Same-process stand-in for a same-account `SendToAgent` demo. |
+| `ExecutionRuntime` — buyer, expert, and verifier escrow calls | `agents/src/suppliers/runtime.ts` | `createReferenceRuntime`, over the viem + Privy or local-key clients in `agents/src/agents/`. |
+
+If the channel or runtime host is down, new negotiations may fail. Funds already in `TaskEscrow`
+stay reachable: release, refund, and timeout are contract calls.
+
 ## Off-chain agents (next PR: TypeScript + viem)
+
+The logo demo runs the call sequence through `createReferenceRuntime`. The role functions below
+are what that runtime delegates to.
 
 All three agents are thin viem clients over the ABI in `out/` and the addresses in
 `deployments/<chainId>.json` (`chainId`, `startBlock`, `paymentToken`, `identityRegistry`,

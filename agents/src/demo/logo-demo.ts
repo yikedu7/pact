@@ -1,14 +1,5 @@
 import { createPublicClient, http, parseEventLogs, stringToHex, type Address } from "viem";
 import { identityRegistryAbi, reputationRegistryAbi, taskEscrowAbi } from "../abi.js";
-import { expertAgree, expertDeliver } from "../agents/expert.js";
-import {
-  buyerApproveOrder,
-  buyerCreateOrder,
-  buyerFund,
-  buyerPreparePayment,
-} from "../agents/buyer.js";
-import { evaluateCriteria, verifierFail, verifierRelease } from "../agents/verifier.js";
-import { encodeRegister } from "../encode.js";
 import type { ChainConfig } from "../chain.js";
 import type { DeploymentFile } from "../deployments.js";
 import { OrderStatus, type DemoScenario } from "../state.js";
@@ -24,7 +15,7 @@ import {
   type ApprovalModeLabel,
 } from "../spec.js";
 import { jcsCanonicalize } from "../hash.js";
-import { createRoleSenders, signingBackend, type TxSender } from "../wallet/index.js";
+import { createReferenceRuntime } from "../suppliers/runtime.js";
 
 export interface DemoResult {
   orderId: bigint;
@@ -45,7 +36,7 @@ function envBigint(name: string): bigint {
 }
 
 async function registerIfNeeded(
-  sender: TxSender,
+  register: (registry: Address, uri: string) => Promise<string>,
   registry: Address,
   existingId: bigint,
   uri: string,
@@ -53,7 +44,7 @@ async function registerIfNeeded(
   txHashes: string[],
 ): Promise<bigint> {
   if (existingId !== 0n) return existingId;
-  const hash = await sender.send(encodeRegister(uri, registry));
+  const hash = await register(registry, uri);
   txHashes.push(hash);
   const client = createPublicClient({ transport: http(rpcUrl) });
   const receipt = await client.getTransactionReceipt({ hash });
@@ -96,8 +87,8 @@ export async function runLogoDemo(opts: {
   approvalMode: ApprovalModeLabel;
 }): Promise<DemoResult> {
   const { chain, deployment, scenario, approvalMode } = opts;
-  const senders = createRoleSenders(chain);
-  const backend = signingBackend();
+  const runtime = createReferenceRuntime(chain);
+  const backend = runtime.signingBackend;
   const txHashes: string[] = [];
   const publicClient = createPublicClient({ transport: http(chain.rpcUrl) });
 
@@ -106,7 +97,7 @@ export async function runLogoDemo(opts: {
   let verifierAgentId = envBigint("VERIFIER_AGENT_ID");
 
   expertAgentId = await registerIfNeeded(
-    senders.expert,
+    runtime.expert.register,
     deployment.identityRegistry,
     expertAgentId,
     "ipfs://guild-design-bot.json",
@@ -114,7 +105,7 @@ export async function runLogoDemo(opts: {
     txHashes,
   );
   buyerAgentId = await registerIfNeeded(
-    senders.buyer,
+    runtime.buyer.register,
     deployment.identityRegistry,
     buyerAgentId,
     "ipfs://guild-buyer-agent.json",
@@ -122,7 +113,7 @@ export async function runLogoDemo(opts: {
     txHashes,
   );
   verifierAgentId = await registerIfNeeded(
-    senders.verifier,
+    runtime.verifier.register,
     deployment.identityRegistry,
     verifierAgentId,
     "ipfs://guild-verifier-bot.json",
@@ -150,21 +141,20 @@ export async function runLogoDemo(opts: {
   const orderIdBefore = await readNextOrderId(deployment.taskEscrow, chain.rpcUrl);
 
   txHashes.push(
-    ...(await buyerPreparePayment(
-      senders.buyer,
+    ...(await runtime.buyer.preparePayment(
       deployment.paymentToken,
       deployment.taskEscrow,
       deployment.mockPaymentToken,
     )),
   );
 
-  const { tx: createTx } = await buyerCreateOrder(senders.buyer, {
+  const { tx: createTx } = await runtime.buyer.createOrder({
     escrow: deployment.taskEscrow,
     paymentToken: deployment.paymentToken,
     mockPaymentToken: deployment.mockPaymentToken,
     sellerAgentId: expertAgentId,
     buyerAgentId,
-    verifier: senders.verifier.address,
+    verifier: runtime.verifier.sender.address,
     spec,
     specUri,
     deliverBy,
@@ -174,8 +164,8 @@ export async function runLogoDemo(opts: {
   txHashes.push(createTx);
 
   const orderId = orderIdBefore;
-  txHashes.push(await expertAgree(senders.expert, deployment.taskEscrow, orderId, hash));
-  txHashes.push(await buyerFund(senders.buyer, deployment.taskEscrow, orderId));
+  txHashes.push(await runtime.expert.agree(deployment.taskEscrow, orderId, hash));
+  txHashes.push(await runtime.buyer.fund(deployment.taskEscrow, orderId));
 
   if (scenario === "timeout") {
     const status = await readOrderStatus(deployment.taskEscrow, chain.rpcUrl, orderId);
@@ -194,15 +184,12 @@ export async function runLogoDemo(opts: {
   const dUri = toDataUri(
     '{"files":["ipfs://guild-logo-1.png","ipfs://guild-logo-2.png","ipfs://guild-logo-3.png"]}',
   );
-  txHashes.push(
-    await expertDeliver(senders.expert, deployment.taskEscrow, orderId, dHash, dUri),
-  );
+  txHashes.push(await runtime.expert.deliver(deployment.taskEscrow, orderId, dHash, dUri));
 
-  const pass = scenario === "pass" && evaluateCriteria(spec, true);
+  const pass = scenario === "pass" && runtime.verifier.evaluateCriteria(spec, true);
   if (pass) {
     txHashes.push(
-      await verifierRelease(
-        senders.verifier,
+      await runtime.verifier.release(
         deployment.taskEscrow,
         orderId,
         resultHash(true),
@@ -210,12 +197,11 @@ export async function runLogoDemo(opts: {
       ),
     );
     if (approvalMode === "user") {
-      txHashes.push(await buyerApproveOrder(senders.buyer, deployment.taskEscrow, orderId));
+      txHashes.push(await runtime.buyer.approveOrder(deployment.taskEscrow, orderId));
     }
   } else {
     txHashes.push(
-      await verifierFail(
-        senders.verifier,
+      await runtime.verifier.fail(
         deployment.taskEscrow,
         orderId,
         resultHash(false),
