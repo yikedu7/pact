@@ -15,10 +15,13 @@ function keyForRole(role: Role, chainId: number): Hex {
   if (chainId === 31337) {
     return ANVIL_KEYS[role];
   }
-  throw new Error(`Missing ${role} private key (set ${role.toUpperCase()}_PRIVATE_KEY)`);
+  throw new Error(
+    `Missing ${role} private key (set ${role.toUpperCase()}_PRIVATE_KEY). ` +
+      `The demo path uses buyer and expert only.`,
+  );
 }
 
-/** LocalEoa (path B). Anvil defaults on chain 31337; otherwise `BUYER_` / `EXPERT_` / `VERIFIER_PRIVATE_KEY`. */
+/** LocalEoa (path B). Anvil defaults for buyer and expert on chain 31337. `VERIFIER_PRIVATE_KEY` is optional local-dev only, not the demo path. */
 export function createLocalSender(role: Role, chain: ChainConfig): TxSender {
   const account = privateKeyToAccount(keyForRole(role, chain.chainId));
   const publicClient = createPublicClient({ transport: http(chain.rpcUrl) });

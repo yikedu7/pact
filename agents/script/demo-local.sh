@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# TypeScript logo demo on local anvil (deploy via Foundry, then agents CLI).
+# Optional local-dev replay on anvil (not the Path A two-wallet handoff).
+# Deploys via Foundry, then `npm run demo` with local EOAs. createOrder.verifier is the buyer.
+# DEFAULT_VERIFIER below is only the contract fallback. New orders do not use it.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"

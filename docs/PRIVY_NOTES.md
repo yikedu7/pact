@@ -56,15 +56,18 @@ CAIP-2 examples (confirm against Privy + chain docs before ship):
 
 RH mainnet today is Robinhood `eip155:4663` — irrelevant to escrow demo except as pattern.
 
-## Three roles for escrow demo
+## Two wallets for the escrow demo
 
-Escrow needs **three distinct addresses** (Buyer funds, Expert delivers, Verifier releases). Map to three Privy server wallets under the **same demo app**:
+Path A uses **two addresses** under the **same Guild Privy app**. The buyer bot holds only the
+buyer wallet id. The expert bot holds only the expert wallet id. `createOrder.verifier` is the
+buyer address, so the buyer also signs `release` / `fail`. Do not require
+`PRIVY_WALLET_VERIFIER_*`. The Monad `defaultVerifier` `0x7E70cCAB3c6862005988E1B2e31D76C35EFaC8A8`
+is unused for new orders.
 
-| Role | Needs to sign | Suggested env map |
+| Role | Needs to sign | Env on that bot only |
 |------|---------------|-------------------|
-| Buyer | `agree` / `fund` (approve USDC + escrow fund) | `PRIVY_WALLET_BUYER_ID` + address |
-| Expert | `deliver` (content hash + URI) | `PRIVY_WALLET_EXPERT_ID` + address |
-| Verifier | `verify` → `release` (or refund path) | `PRIVY_WALLET_VERIFIER_ID` + address |
+| Buyer | token approve, `createOrder`, `fund`, `release` / `fail`, `approve` in user mode | `PRIVY_WALLET_BUYER_ID` + address |
+| Expert | `agree`, `submitDelivery` | `PRIVY_WALLET_EXPERT_ID` + address |
 
 Minimal TypeScript shape for acceptance bot / demo:
 
@@ -88,7 +91,7 @@ async function sendAs(
 }
 ```
 
-Do **not** expose one shared wallet that impersonates all three — judges will ask who holds funds.
+Do **not** put both wallet ids in one process, and do **not** add a third verifier wallet for the demo.
 
 ## Creating the three wallets
 
@@ -101,7 +104,7 @@ app secret in that template. Operators generate three local EOAs and use a testn
 `UserAaSession` is a follow-up. ZeroDev / a paymaster is an optional later UX upgrade, not the
 self-host default. Bring-your-own Privy is also a follow-up.
 
-Official-bot operators (not public-skill installers) create any missing role wallet on first run:
+Official-bot operators (not public-skill installers) create the buyer and expert wallets:
 
 ```bash
 cd agents && npm run wallets:bootstrap
@@ -109,15 +112,15 @@ cd agents && npm run wallets:bootstrap
 
 That is `POST https://api.privy.io/v1/wallets` with `{"chain_type":"ethereum"}` and header
 `User-Agent: PrivyNodeJS/1.0` (Privy often returns 403 without it). Each role sends a stable
-`privy-idempotency-key` (`guild-escrow-server-wallet:buyer|expert|verifier`). Ids and addresses
+`privy-idempotency-key` (`guild-escrow-server-wallet:buyer|expert`). Ids and addresses
 are cached in gitignored `wallets/guild-roles.json` and printed as:
 
-- `PRIVY_WALLET_BUYER_ID` / `PRIVY_WALLET_BUYER_ADDRESS`
-- `PRIVY_WALLET_EXPERT_ID` / `PRIVY_WALLET_EXPERT_ADDRESS`
-- `PRIVY_WALLET_VERIFIER_ID` / `PRIVY_WALLET_VERIFIER_ADDRESS`
+- `PRIVY_WALLET_BUYER_ID` / `PRIVY_WALLET_BUYER_ADDRESS` — buyer bot only
+- `PRIVY_WALLET_EXPERT_ID` / `PRIVY_WALLET_EXPERT_ADDRESS` — expert bot only
 
-Save those as bot secrets and reuse them. A later run with the ids unset and the cache gone
-creates another set. Never commit the app secret, wallet ids, or `wallets/`.
+`PRIVY_WALLET_VERIFIER_ID` / `PRIVY_WALLET_VERIFIER_ADDRESS` are not printed and are not part
+of the demo. Save the two ids as separate bot secrets and reuse them. A later run with the ids
+unset and the cache gone creates another set. Never commit the app secret, wallet ids, or `wallets/`.
 
 Fund Buyer (and Expert / Verifier, who also send transactions) with faucet native gas; fund
 Buyer with MockUSDC after deploy when the token is not mintable by the buyer.
@@ -152,7 +155,7 @@ Rewrite for escrow:
 1. New Privy app (or sandbox) + 3 server wallets → env map above  
 2. RPC + caip2 for Monad testnet; verify Privy accepts that caip2 once before demo day  
 3. Bot: `sendAs(role, tx)` wrapping the RH RPC shape  
-4. Script: mint MockUSDC → Buyer; approve escrow; fund → deliver → verify → release  
+4. Handoff: buyer create → expert agree → buyer fund → expert deliver → buyer release. One wallet per process.  
 5. If Monad Privy/RPC fails: flip env to Base Sepolia, same wallets/addresses  
 
 Questions / wiring after 颗粒 lands: continue in RH 1:1 (room cannot do secret forms or box sign-in).

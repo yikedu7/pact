@@ -24,7 +24,8 @@ import {
   type ApprovalModeLabel,
 } from "../spec.js";
 import { jcsCanonicalize } from "../hash.js";
-import { createRoleSenders, signingBackend, type TxSender } from "../wallet/index.js";
+import { signingBackend, type TxSender } from "../wallet/index.js";
+import { createLocalSender } from "../wallet/local.js";
 
 export interface DemoResult {
   orderId: bigint;
@@ -96,14 +97,24 @@ export async function runLogoDemo(opts: {
   approvalMode: ApprovalModeLabel;
 }): Promise<DemoResult> {
   const { chain, deployment, scenario, approvalMode } = opts;
-  const senders = await createRoleSenders(chain);
+  if (signingBackend() === "privy") {
+    throw new Error(
+      "npm run demo is optional local-dev only. It is not the Path A critical path and will not open Privy wallets. " +
+        "Unset PRIVY_APP_ID and PRIVY_APP_SECRET. Path A uses escrow:buyer-create-fund, escrow:expert-agree-deliver, and escrow:buyer-release, one wallet per process.",
+    );
+  }
+  const optionalThird = process.env.GUILD_OPTIONAL_THIRD_VERIFIER === "1";
+  const buyer = createLocalSender("buyer", chain);
+  const expert = createLocalSender("expert", chain);
+  const verifierSender = optionalThird ? createLocalSender("verifier", chain) : buyer;
+  const senders = { buyer, expert, verifier: verifierSender };
   const backend = signingBackend();
   const txHashes: string[] = [];
   const publicClient = createPublicClient({ transport: http(chain.rpcUrl) });
 
   let expertAgentId = envBigint("EXPERT_AGENT_ID");
   let buyerAgentId = envBigint("BUYER_AGENT_ID");
-  let verifierAgentId = envBigint("VERIFIER_AGENT_ID");
+  let verifierAgentId = optionalThird ? envBigint("VERIFIER_AGENT_ID") : 0n;
 
   expertAgentId = await registerIfNeeded(
     senders.expert,
@@ -121,14 +132,16 @@ export async function runLogoDemo(opts: {
     chain.rpcUrl,
     txHashes,
   );
-  verifierAgentId = await registerIfNeeded(
-    senders.verifier,
-    deployment.identityRegistry,
-    verifierAgentId,
-    "ipfs://guild-verifier-bot.json",
-    chain.rpcUrl,
-    txHashes,
-  );
+  if (optionalThird) {
+    verifierAgentId = await registerIfNeeded(
+      senders.verifier,
+      deployment.identityRegistry,
+      verifierAgentId,
+      "ipfs://guild-verifier-bot.json",
+      chain.rpcUrl,
+      txHashes,
+    );
+  }
 
   const block = await publicClient.getBlock();
   const deliverBy = BigInt(Number(block.timestamp) + 86400);

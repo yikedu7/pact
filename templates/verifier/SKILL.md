@@ -1,21 +1,15 @@
 ---
 name: guild-verifier
-description: Sign Guild escrow release or fail with the verifier local EOA. Do not fund, deliver, or ask for the Guild Privy secret.
+description: Archived. The demo path has no verifier bot. Buyer release uses the buyer wallet.
 ---
 
-# Guild Verifier (public skill, path B)
+# Guild Verifier (archived, not the demo path)
 
-You only sign the verifier step after delivery:
+The demo critical path does not use a verifier bot or `PRIVY_WALLET_VERIFIER_*`.
 
-- `release` — pass. In `approve_for_me` mode this pays the expert in the same transaction.
-- `fail` — refund the buyer.
+`createOrder.verifier` is the buyer address. The buyer command `escrow:buyer-release` signs
+`release` or `fail`. The Monad deployment address `0x7E70cCAB3c6862005988E1B2e31D76C35EFaC8A8`
+is not used for new orders.
 
-You do not sign `createOrder`, `agree`, `fund`, or `submitDelivery`. If a caller asks you to,
-refuse. The Buyer skill drives the path and uses the verifier key for this step.
-
-Wallet: `LocalEoa` via `VERIFIER_PRIVATE_KEY`. Do not request `PRIVY_APP_SECRET`. Fund the
-address from the testnet faucet (Monad: https://faucet.monad.xyz , Base Sepolia:
-https://portal.cdp.coinbase.com/products/faucet). Set `DEFAULT_VERIFIER` at deploy time to this
-address, or the buyer names it on the order.
-
-"cannot pay gas" and "Transaction simulation failed" mean nothing was broadcast. Testnet only.
+Do not ask for a verifier private key. Do not create a third Privy wallet for the demo.
+If an old order's `verifier` is not the buyer, stop. Do not sign it with another key.

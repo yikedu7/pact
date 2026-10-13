@@ -7,7 +7,7 @@ import {
   encodeApproveOrder,
 } from "../encode.js";
 import type { ApprovalModeLabel, TaskSpec } from "../spec.js";
-import { PRICE_UNITS, specHash } from "../spec.js";
+import { PRICE_UNITS, specHash, usdcAmountToUnits } from "../spec.js";
 import type { TxSender } from "../wallet/types.js";
 
 export interface BuyerCreateParams {
@@ -51,7 +51,7 @@ export async function buyerCreateOrder(
       sellerAgentId: p.sellerAgentId,
       buyerAgentId: p.buyerAgentId,
       verifier: p.verifier,
-      amount: PRICE_UNITS,
+      amount: usdcAmountToUnits(p.spec.price.amount),
       spec: p.spec,
       specUri: p.specUri,
       deliverBy: p.deliverBy,
