@@ -1,12 +1,41 @@
 # agent-escrow
 
-Agent task escrow + ERC-8004 reputation (hackathon MVP).
+Guild is on-chain escrow for agent task deals, with ERC-8004 reputation (hackathon MVP). The
+negotiation layer currently runs on existing agent hosts.
 
-A buyer agent orders a task from an expert bot. The structured delivery criteria are frozen
-on-chain as a hash and payment is escrowed in an ERC-20. A verifier bot checks the delivery and
-either releases the funds (after user approval, or automatically in `approve_for_me` mode) or
-refunds the buyer. Timeouts also refund. Every settlement writes the fulfillment record (task
-type, amount, pass/fail, on time) to an ERC-8004 Reputation Registry.
+A buyer orders a task from an expert. The structured delivery criteria are frozen on-chain as a
+hash and payment is escrowed in an ERC-20. A verifier checks the delivery and either releases the
+funds (after user approval, or automatically in `approve_for_me` mode) or refunds the buyer.
+Timeouts also refund. Every settlement writes the fulfillment record (task type, amount,
+pass/fail, on time) to an ERC-8004 Reputation Registry.
+
+Two supplier interfaces sit beside the contracts. They are pluggable. Cursor and Grok Bot are the
+first adapters. The boundary is in
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#suppliers).
+
+| Layer | What it owns | First adapter |
+| --- | --- | --- |
+| **Protocol core** (not a vendor) | `TaskEscrow`, MockUSDC (testnet), ERC-8004 Identity and Reputation. Money and verdicts. | Contracts in this repo |
+| **Negotiation channel** | `send(envelope)` / `onMessage` for `guild.negotiate/v0.1` over HTTPS POST | Cursor Automations webhook |
+| **Execution runtime** | Buyer, expert, and verifier skills; the delivery; signing on-chain transactions | Grok Bot (Cursor) |
+
+```
+  negotiation channel                 execution runtime
+  POST guild.negotiate/v0.1           skills + signed txs
+  now: Cursor Automations webhook     now: Grok Bot (Cursor)
+                 \                         /
+                  ▼                       ▼
+           protocol core (not a vendor)
+           TaskEscrow · MockUSDC · ERC-8004
+```
+
+The protocol only requires an HTTPS POST entry that accepts `guild.negotiate/v0.1`. The Cursor
+Automations webhook is the first adapter of that entry. When one Cursor account shares one webhook
+UUID, a same-account demo may fall back to `SendToAgent`. That fallback is a demo constraint, not
+a protocol requirement.
+
+If the channel or runtime host is down, new negotiations may fail. Funds already in `TaskEscrow`
+stay reachable: release, refund, and timeout are on-chain calls and do not go through that host.
 
 > **Testnet only. Never use real funds or keys that hold real funds.** The contracts are unaudited,
 > and the scripts refuse to run on any chain other than Monad testnet, Base Sepolia, and anvil.
@@ -165,7 +194,9 @@ CI (`.github/workflows/ci.yml`) runs format, lint, build, and the full test suit
 
 ## TypeScript agents (logo demo)
 
-Off-chain agents live in [`agents/`](agents/). They mirror `script/Demo.s.sol`: register ERC-8004
+[`agents/`](agents/) is the reference client for the escrow calls in the local and testnet demos.
+The execution runtime for the hosted demo is Grok Bot, which runs the same three roles as skills.
+These scripts mirror `script/Demo.s.sol`: register ERC-8004
 agents, `createOrder` → `agree` → `fund` → `submitDelivery` → `release`/`fail`, then buyer
 `approve` when `approval_mode=user`. Criteria JSON is hashed with RFC 8785 (JCS), matching
 `TaskEscrow.hashSpec` and the pinned vector in `test/Demo.t.sol`.

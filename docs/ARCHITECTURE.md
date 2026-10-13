@@ -1,7 +1,66 @@
 # Architecture
 
-Agent-to-agent task escrow with ERC-8004 reputation. Product source of truth:
+On-chain escrow for agent task deals, with ERC-8004 reputation. The negotiation layer currently
+runs on existing agent hosts. Product source of truth:
 [`PRODUCT_SPEC.md`](./PRODUCT_SPEC.md). **Testnet only** (Monad testnet primary, Base Sepolia fallback).
+
+## Suppliers
+
+Guild is the protocol. Two vendor layers plug in beside it. This section documents those
+interfaces. This repository ships the protocol core and the reference client in `agents/`.
+
+```
+  Negotiation channel (vendor)         Execution runtime (vendor)
+  ┌───────────────────────────┐        ┌───────────────────────────┐
+  │ guild.negotiate/v0.1      │        │ buyer / expert / verifier │
+  │ HTTPS POST                │◀──────▶│ skills                    │
+  │ send(envelope)/onMessage  │        │ delivery + signed txs     │
+  └───────────────────────────┘        └─────────────┬─────────────┘
+  First adapter:                       First adapter:│
+  Cursor Automations webhook           Grok Bot      │
+                                       (Cursor)      ▼
+         ┌─────────────────────────────────────────────────┐
+         │ Protocol core (not a vendor)                    │
+         │ TaskEscrow · MockUSDC (testnet)                 │
+         │ ERC-8004 Identity + Reputation                  │
+         └─────────────────────────────────────────────────┘
+```
+
+| Layer | Interface | First adapter | Later (roadmap, no code) |
+| --- | --- | --- | --- |
+| Protocol core | Order state machine, ERC-20 custody, ERC-8004 feedback. Holds the funds and the verdict. | Contracts in this repo | — |
+| Negotiation channel | `send(envelope)` / `onMessage` for `guild.negotiate/v0.1` envelopes over HTTPS POST (or an equivalent transport with that shape) | Cursor Automations webhook | Self-hosted HTTP relay; push endpoints on other agent hosts |
+| Execution runtime | Run the buyer, expert, and verifier skills, produce the delivery, sign the escrow transactions | Grok Bot (Cursor) | Other proactive agents on other hosts |
+
+Money and verdicts live in the protocol core. If the current channel and runtime host (Cursor) is
+down, new negotiations may fail. Funds already in `TaskEscrow` stay reachable: `release`, `fail`,
+`approve`, `releaseExpired`, and `refundExpired` are contract calls.
+
+### Negotiation channel
+
+`send(envelope)` delivers a `guild.negotiate/v0.1` envelope to the counterparty. `onMessage`
+receives one. The protocol only requires an HTTPS POST entry that accepts that envelope. The
+Cursor Automations webhook is the first adapter of that entry.
+
+A same-account demo may use `SendToAgent` when one Cursor account shares one webhook UUID. That
+is a constraint of the demo setup, not a protocol requirement.
+
+Unbuilt, and out of scope for the hackathon:
+
+- A self-hosted HTTP relay, and push endpoints on other agent hosts, as further channel adapters.
+- An optional public relay in front of the expert's endpoint. It checks the buyer wallet
+  signature, rate-limits, and forwards the envelope. The expert's webhook key stays private. The
+  expert can self-host that relay.
+
+### Execution runtime
+
+Any runtime that can run the three skills, produce a delivery, and sign the on-chain transactions
+fits this interface. Grok Bot on Cursor is the first adapter. [`agents/`](../agents/) is the
+reference client for those transactions (Privy or a local key), and the call sequence the local
+demo uses.
+
+The diagram below is that on-chain call path. The negotiation channel is off the picture; it only
+moves envelopes.
 
 ```
                  ┌────────────────────┐   createOrder / fund / approve     ┌───────────────────────┐
@@ -174,7 +233,11 @@ Reputation never blocks settlement. `giveFeedback` runs in `try/catch`. On failu
 emits `ReputationWriteFailed` and the payment still moves. Feedback can fail, for example, if an
 agent owner approves the escrow as an ERC-721 operator, which ERC-8004 treats as self-feedback.
 
-## Off-chain agents (next PR: TypeScript + viem)
+## Reference client (`agents/`)
+
+These TypeScript modules sign the calls in the diagram above for the local and testnet demos.
+Grok Bot is the execution runtime that runs the same three roles as skills. The protocol core is
+the contracts those calls land on.
 
 All three agents are thin viem clients over the ABI in `out/` and the addresses in
 `deployments/<chainId>.json` (`chainId`, `startBlock`, `paymentToken`, `identityRegistry`,
@@ -241,7 +304,7 @@ Wiring notes:
   Privy lists. If Privy does not support it, the same addresses work on Base Sepolia, because the
   deployment is just a config switch.
 - Privy credentials (`PRIVY_APP_ID`, `PRIVY_APP_SECRET`, and the wallet ids) belong to the
-  TypeScript agents (next PR). They are not read by any Foundry script. Never commit them.
+  TypeScript reference client. They are not read by any Foundry script. Never commit them.
   `.gitignore` excludes `privy.json`, `wallet.json` and `wallets/`.
 - `script/Demo.s.sol` signs with raw testnet keys (anvil keys locally) as a stand-in. The
   TypeScript demo replaces each `vm.broadcast(key)` with `sendAs(role, tx)`, in the same order.
