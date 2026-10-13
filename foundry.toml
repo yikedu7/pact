@@ -1,0 +1,54 @@
+[profile.default]
+src = "contracts"
+test = "test"
+script = "script"
+out = "out"
+libs = ["lib"]
+solc_version = "0.8.28"
+# Cancun is supported by both Monad testnet and Base Sepolia.
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+# ERC-8004's NewFeedback event (11 fields) exceeds the legacy codegen stack limit.
+via_ir = true
+# Deterministic bytecode for Sourcify / Etherscan verification.
+bytecode_hash = "none"
+use_literal_content = true
+remappings = [
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "forge-std/=lib/forge-std/src/",
+]
+fs_permissions = [{ access = "read-write", path = "./deployments" }]
+
+[profile.default.fuzz]
+runs = 256
+
+[profile.default.invariant]
+runs = 64
+depth = 64
+fail_on_revert = true
+
+[profile.ci.fuzz]
+runs = 2000
+
+[profile.ci.invariant]
+runs = 256
+depth = 128
+fail_on_revert = true
+
+[lint]
+# Deadlines are hours/days long, so validator timestamp drift is irrelevant. Agent ids are minted with
+# `_mint` so contract wallets without `onERC721Received` can register.
+exclude_lints = ["block-timestamp", "unsafe-oz-erc721-mint"]
+# Run explicitly via `forge lint` (CI does); build-time linting ignores `exclude_lints`.
+lint_on_build = false
+
+[fmt]
+line_length = 120
+sort_imports = true
+
+# Public endpoints; pass `--rpc-url <url>` to use a private provider instead.
+[rpc_endpoints]
+monad_testnet = "https://testnet-rpc.monad.xyz"
+base_sepolia = "https://sepolia.base.org"
+anvil = "http://127.0.0.1:8545"
