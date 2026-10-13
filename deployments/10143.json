@@ -1,11 +1,11 @@
 {
   "chainId": 10143,
-  "defaultVerifier": "0x7E70cCAB3c6862005988E1B2e31D76C35EFaC8A8",
+  "defaultVerifier": "0xcB6D16A55Ee8A019037C58AA882da5785d17aB37",
   "deployer": "0xcB6D16A55Ee8A019037C58AA882da5785d17aB37",
   "identityRegistry": "0xD4679fBE4c08074098286BAFd7c2fD5BD99Bc18B",
   "mockPaymentToken": true,
   "paymentToken": "0x86e4e74838a65389F1df96Af4141242119e3318D",
   "reputationRegistry": "0x7C63A4848f18E9E9f50B984b29BcF8d99fdC215A",
-  "startBlock": 70668464,
-  "taskEscrow": "0x56c58c9cac5Bf071e7808BcB4535647149860D25"
+  "startBlock": 70748844,
+  "taskEscrow": "0xcbc71525F7689c495e6Db11c6989EB224Bdd8E60"
 }
