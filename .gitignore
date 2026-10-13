@@ -16,6 +16,10 @@ privy.json
 wallet.json
 wallets/
 
+# Node (TypeScript agents)
+node_modules/
+agents/node_modules/
+
 # OS / editors
 .DS_Store
 .idea/

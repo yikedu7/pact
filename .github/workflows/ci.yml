@@ -17,6 +17,30 @@ env:
   FOUNDRY_PROFILE: ci
 
 jobs:
+  agents:
+    name: agents (typecheck + unit tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agents
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: agents/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
   forge:
     name: forge (${{ matrix.network }})
     runs-on: ubuntu-latest
