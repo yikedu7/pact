@@ -23,7 +23,7 @@ export type { BuyerCreateParams };
 /** Buyer escrow calls. `sender` is the wallet that signs them. */
 export interface BuyerClient {
   readonly sender: TxSender;
-  register(registry: Address, agentUri?: string): Promise<string>;
+  register(registry: Address, agentUri?: string): Promise<Hex>;
   preparePayment(
     paymentToken: Address,
     escrow: Address,
@@ -37,7 +37,7 @@ export interface BuyerClient {
 /** Expert escrow calls. `sender` is the wallet that signs them. */
 export interface ExpertClient {
   readonly sender: TxSender;
-  register(registry: Address, agentUri?: string): Promise<string>;
+  register(registry: Address, agentUri?: string): Promise<Hex>;
   agree(escrow: Address, orderId: bigint, specHash: Hex): Promise<string>;
   deliver(
     escrow: Address,
@@ -50,7 +50,7 @@ export interface ExpertClient {
 /** Verifier escrow calls. `sender` is the wallet that signs them. */
 export interface VerifierClient {
   readonly sender: TxSender;
-  register(registry: Address, agentUri?: string): Promise<string>;
+  register(registry: Address, agentUri?: string): Promise<Hex>;
   evaluateCriteria(spec: TaskSpec, scenarioPass: boolean): boolean;
   release(
     escrow: Address,

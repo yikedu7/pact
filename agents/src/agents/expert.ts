@@ -6,7 +6,7 @@ export async function expertRegister(
   expert: TxSender,
   registry: Address,
   agentUri = "ipfs://guild-design-bot.json",
-): Promise<string> {
+): Promise<Hex> {
   return expert.send(encodeRegister(agentUri, registry));
 }
 

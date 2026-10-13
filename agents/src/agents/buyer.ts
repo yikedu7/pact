@@ -1,4 +1,4 @@
-import type { Address } from "viem";
+import type { Address, Hex } from "viem";
 import {
   encodeApprove,
   encodeApproveOrder,
@@ -15,7 +15,7 @@ export async function buyerRegister(
   buyer: TxSender,
   registry: Address,
   agentUri = "ipfs://guild-buyer-agent.json",
-): Promise<string> {
+): Promise<Hex> {
   return buyer.send(encodeRegister(agentUri, registry));
 }
 

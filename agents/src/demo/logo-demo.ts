@@ -1,4 +1,11 @@
-import { createPublicClient, http, parseEventLogs, stringToHex, type Address } from "viem";
+import {
+  createPublicClient,
+  http,
+  parseEventLogs,
+  stringToHex,
+  type Address,
+  type Hex,
+} from "viem";
 import { identityRegistryAbi, reputationRegistryAbi, taskEscrowAbi } from "../abi.js";
 import type { ChainConfig } from "../chain.js";
 import type { DeploymentFile } from "../deployments.js";
@@ -36,7 +43,7 @@ function envBigint(name: string): bigint {
 }
 
 async function registerIfNeeded(
-  register: (registry: Address, uri: string) => Promise<string>,
+  register: (registry: Address, uri: string) => Promise<Hex>,
   registry: Address,
   existingId: bigint,
   uri: string,

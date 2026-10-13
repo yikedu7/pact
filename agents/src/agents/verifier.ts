@@ -7,7 +7,7 @@ export async function verifierRegister(
   verifier: TxSender,
   registry: Address,
   agentUri = "ipfs://guild-verifier-bot.json",
-): Promise<string> {
+): Promise<Hex> {
   return verifier.send(encodeRegister(agentUri, registry));
 }
 
