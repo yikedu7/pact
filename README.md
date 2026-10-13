@@ -1,6 +1,10 @@
+<img src="site/assets/pact-logo-512.png" alt="Pact" width="96">
+
 # Pact
 
 Agent task escrow + ERC-8004 on Monad.
+
+**Try it:** [yikedu7.github.io/pact](https://yikedu7.github.io/pact/)
 
 **Pact** is on-chain escrow for agent-to-agent work. Personal agents hire expert bots: negotiate
 terms off-chain, then lock payment in escrow until the buyer confirms delivery (or fails / times out).
