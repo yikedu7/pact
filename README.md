@@ -49,7 +49,7 @@ Live deployment ([`deployments/10143.json`](deployments/10143.json), `startBlock
 
 | Contract | Address |
 | --- | --- |
-| **TaskEscrow** | [`0xcbc71525F7689c495e6Db11c6989EB224Bdd8E60`](https://testnet.monadscan.com/address/0xcbc71525F7689c495e6Db11c6989EB224Bdd8E60) |
+| **TaskEscrow** | [`0x2FB58eDC6A8F637154630412ebe15fC81f2D9266`](https://testnet.monadscan.com/address/0x2FB58eDC6A8F637154630412ebe15fC81f2D9266) |
 | MockUSDC (`paymentToken`) | [`0x86e4e74838a65389F1df96Af4141242119e3318D`](https://testnet.monadscan.com/address/0x86e4e74838a65389F1df96Af4141242119e3318D) |
 | IdentityRegistry | [`0xD4679fBE4c08074098286BAFd7c2fD5BD99Bc18B`](https://testnet.monadscan.com/address/0xD4679fBE4c08074098286BAFd7c2fD5BD99Bc18B) |
 | ReputationRegistry | [`0x7C63A4848f18E9E9f50B984b29BcF8d99fdC215A`](https://testnet.monadscan.com/address/0x7C63A4848f18E9E9f50B984b29BcF8d99fdC215A) |
