@@ -44,7 +44,7 @@ Created → Agreed (spec frozen) → Funded → Delivered → Verified(pass/fail
 
 ## Monad testnet (10143)
 
-Live deployment ([`deployments/10143.json`](deployments/10143.json), `startBlock` 70748844). Explorers:
+Live deployment ([`deployments/10143.json`](deployments/10143.json), `startBlock` 70854321). Explorers:
 [MonadVision](https://testnet.monadvision.com) · [Monadscan](https://testnet.monadscan.com).
 
 | Contract | Address |
@@ -56,6 +56,18 @@ Live deployment ([`deployments/10143.json`](deployments/10143.json), `startBlock
 
 `defaultVerifier` / deployer in the deployment file is the buyer wallet used at deploy time; **new
 orders still pass `verifier` = buyer** explicitly and do not depend on that fallback.
+
+## Verified on-chain
+
+Today's Path A demo, order #1 on TaskEscrow `0x2FB5…9266`, ran from negotiation to `Released` with two separate wallets. The Buyer was the verifier.
+
+| Step | Tx |
+| --- | --- |
+| createOrder | [`0xfeb08909…038e79`](https://testnet.monadexplorer.com/tx/0xfeb08909c166be7a875616423deb0c3d38687de19e48d58095cf1e189c038e79) |
+| agree (Expert) | [`0xa022f0a1…fc9225`](https://testnet.monadexplorer.com/tx/0xa022f0a1303032fd4a63c09d56026cb32da1eb26e75728f8ddf106e45dfc9225) |
+| fund | [`0xb4eaf4b8…3ac7bf`](https://testnet.monadexplorer.com/tx/0xb4eaf4b8788ddafb9d76bce929e4e57c3416c6ecd1a0ce0b673168480c3ac7bf) |
+| submitDelivery (Expert) | [`0x5f3f13e8…47ffe7`](https://testnet.monadexplorer.com/tx/0x5f3f13e8feed8d6ddfe4b62306c6b12ea7f08348bc08b1b2787b71fee147ffe7) |
+| verifyAndRelease (Buyer) | [`0xfdd0ad82…242e69`](https://testnet.monadexplorer.com/tx/0xfdd0ad82c2f0103bf3f694456a5b06b8263fa55e09a9fa6e58045fa8ab242e69) |
 
 ## Recorded demo
 
