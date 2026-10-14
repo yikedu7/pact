@@ -6,6 +6,6 @@
   "mockPaymentToken": true,
   "paymentToken": "0x86e4e74838a65389F1df96Af4141242119e3318D",
   "reputationRegistry": "0x7C63A4848f18E9E9f50B984b29BcF8d99fdC215A",
-  "startBlock": 70748844,
-  "taskEscrow": "0xcbc71525F7689c495e6Db11c6989EB224Bdd8E60"
+  "startBlock": 70854321,
+  "taskEscrow": "0x2FB58eDC6A8F637154630412ebe15fC81f2D9266"
 }
