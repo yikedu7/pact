@@ -275,6 +275,11 @@
     @media (prefers-reduced-motion: reduce) {
       .card { transition: none; }
     }
+    details.chain summary { cursor: pointer; list-style: none; }
+    details.chain summary::-webkit-details-marker { display: none; }
+    details.chain summary h2 { display: inline; }
+    details.chain summary h2::after { content: " +"; opacity: .6; }
+    details.chain[open] summary h2::after { content: " \2212"; }
   </style>
 </head>
 <body>
@@ -311,8 +316,8 @@
       </section>
       <p class="hint" data-i18n="hint">Opens the Grok Bot template. Import it, then say “setup”.</p>
 
-      <section class="chain">
-        <h2 data-i18n="chain">On-chain on Monad testnet (10143)</h2>
+      <details class="chain">
+        <summary><h2 data-i18n="chain">On-chain on Monad testnet (10143)</h2></summary>
         <ul>
           <li>
             <span class="name" data-i18n="nameEscrow">TaskEscrow</span>
@@ -331,32 +336,7 @@
             <a class="addr" href="https://testnet.monadexplorer.com/address/0x7C63A4848f18E9E9f50B984b29BcF8d99fdC215A" target="_blank" rel="noopener noreferrer">0x7C63A4848f18E9E9f50B984b29BcF8d99fdC215A</a>
           </li>
         </ul>
-      </section>
-      <section class="chain">
-        <h2 data-i18n="verified">Verified on-chain: demo order #1 (Released)</h2>
-        <ul>
-          <li>
-            <span class="name" data-i18n="tx_create">createOrder</span>
-            <a class="addr" href="https://testnet.monadexplorer.com/tx/0xfeb08909c166be7a875616423deb0c3d38687de19e48d58095cf1e189c038e79" target="_blank" rel="noopener noreferrer">0xfeb08909…9c038e79</a>
-          </li>
-          <li>
-            <span class="name" data-i18n="tx_agree">agree (Expert)</span>
-            <a class="addr" href="https://testnet.monadexplorer.com/tx/0xa022f0a1303032fd4a63c09d56026cb32da1eb26e75728f8ddf106e45dfc9225" target="_blank" rel="noopener noreferrer">0xa022f0a1…5dfc9225</a>
-          </li>
-          <li>
-            <span class="name" data-i18n="tx_fund">fund</span>
-            <a class="addr" href="https://testnet.monadexplorer.com/tx/0xb4eaf4b8788ddafb9d76bce929e4e57c3416c6ecd1a0ce0b673168480c3ac7bf" target="_blank" rel="noopener noreferrer">0xb4eaf4b8…0c3ac7bf</a>
-          </li>
-          <li>
-            <span class="name" data-i18n="tx_deliver">submitDelivery (Expert)</span>
-            <a class="addr" href="https://testnet.monadexplorer.com/tx/0x5f3f13e8feed8d6ddfe4b62306c6b12ea7f08348bc08b1b2787b71fee147ffe7" target="_blank" rel="noopener noreferrer">0x5f3f13e8…e147ffe7</a>
-          </li>
-          <li>
-            <span class="name" data-i18n="tx_release">verifyAndRelease (Buyer)</span>
-            <a class="addr" href="https://testnet.monadexplorer.com/tx/0xfdd0ad82c2f0103bf3f694456a5b06b8263fa55e09a9fa6e58045fa8ab242e69" target="_blank" rel="noopener noreferrer">0xfdd0ad82…ab242e69</a>
-          </li>
-        </ul>
-      </section>
+      </details>
     </main>
 
     <footer>
@@ -384,12 +364,6 @@
           nameUsdc: "MockUSDC",
           nameIdentity: "ERC-8004 Identity",
           nameReputation: "ERC-8004 Reputation",
-          verified: "Verified on-chain: demo order #1 (Released)",
-          tx_create: "createOrder",
-          tx_agree: "agree (Expert)",
-          tx_fund: "fund",
-          tx_deliver: "submitDelivery (Expert)",
-          tx_release: "verifyAndRelease (Buyer)",
           footer: "GitHub"
         },
         zh: {
@@ -406,12 +380,6 @@
           open: "打开模板",
           hint: "打开 Grok Bot 模板，导入后说「配」开始。",
           chain: "Monad 测试网链上合约（10143）",
-          verified: "链上已验证：demo 订单 #1（已放款）",
-          tx_create: "创建订单",
-          tx_agree: "同意（Expert）",
-          tx_fund: "注资",
-          tx_deliver: "提交交付（Expert）",
-          tx_release: "验收放款（Buyer）",
 
           nameEscrow: "TaskEscrow",
           nameUsdc: "MockUSDC",
